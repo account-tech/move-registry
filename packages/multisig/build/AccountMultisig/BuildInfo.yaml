@@ -1,0 +1,35 @@
+---
+compiled_package_info:
+  package_name: AccountMultisig
+  address_alias_instantiation:
+    account_extensions: e59b21cc35bf31b7cbc3e3f309fa810e059e481322ecf96518a608a15503b6d2
+    account_multisig: "0000000000000000000000000000000000000000000000000000000000000000"
+    account_protocol: 4803761efb11498331d8e70c741602dbbe2ddc97f667174931ccc669fd4fb958
+    std: "0000000000000000000000000000000000000000000000000000000000000001"
+    sui: "0000000000000000000000000000000000000000000000000000000000000002"
+  source_digest: 52B1DDC5F144140CACE43ED4CBBB94F2703C7A5DE80438EFACDB386DD3010EC3
+  build_flags:
+    dev_mode: false
+    test_mode: false
+    generate_docs: false
+    save_disassembly: false
+    install_dir: ~
+    force_recompilation: false
+    lock_file: "./Move.lock"
+    fetch_deps_only: false
+    skip_fetch_latest_git_deps: false
+    default_flavor: sui
+    default_edition: ~
+    deps_as_root: false
+    silence_warnings: false
+    warnings_are_errors: false
+    json_errors: false
+    additional_named_addresses: {}
+    lint_flag:
+      no_lint: false
+      lint: false
+dependencies:
+  - AccountExtensions
+  - AccountProtocol
+  - MoveStdlib
+  - Sui
