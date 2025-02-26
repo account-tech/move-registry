@@ -19,7 +19,7 @@ We follow a fork and pull request workflow:
 
 1. **Fork the Repository**: Create your own fork from the main branch
 2. **Create a new branch**: Use the prefix `config/` for new account configs, `feature/` for new features, `fix/` for bug fixes, `chore/` for other changes
-3. **Make Changes**: Implement your smart account or changes
+3. **Make Changes**: Implement your smart account in the `packages/community/` directory
 4. **Test**: Ensure proper test coverage and that all tests pass
 5. **Commit Changes**: Use clear, descriptive commit messages
 6. **Submit a Pull Request**: Create a PR from your fork to the main repository
