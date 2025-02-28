@@ -13,7 +13,7 @@ use account_extensions::extensions::Extensions;
 use account_protocol::{
     account::{Self, Account, Auth},
     executable::Executable,
-    user::User,
+    user::{Self, User},
 };
 use account_payment::version;
 
@@ -52,12 +52,12 @@ public fun new_account(
     ctx: &mut TxContext,
 ): Account<Payment, Pending> {
     let config = Payment {
-        members: vec_map::empty(),
+        members: vec_map::from_keys_values(vector[ctx.sender()], vector[vec_set::empty()]),
     };
 
     let (protocol_addr, protocol_version) = extensions.get_latest_for_name(b"AccountProtocol".to_string());
     let (payment_addr, payment_version) = extensions.get_latest_for_name(b"AccountPayment".to_string());
-    // add AccountProtocol and AccountPayment, minimal dependencies for the Multisig Account to work
+    // add AccountProtocol and AccountPayment, minimal dependencies for the Payment Account to work
     account::new(
         extensions, 
         config, 
@@ -83,34 +83,29 @@ public fun empty_outcome(): Pending {
 }
 
 /// Only a member with the required role can approve the intent.
-public fun approve(
+public fun approve_intent(
     account: &mut Account<Payment, Pending>,
     key: String,
     ctx: &TxContext,
 ) {
     account.config().assert_is_member(ctx);
-
-    let intent_mut = account.intents_mut(version::current(), Witness()).get_mut(key);
-    account.config().assert_has_role(ctx.sender(), intent_mut.role());
-
-    assert!(intent_mut.outcome_mut().approved_by.is_none(), EAlreadyApproved);
+    account.config().assert_has_role(account.intents().get(key).role(), ctx);
+    assert!(account.intents().get(key).outcome().approved_by.is_none(), EAlreadyApproved);
     
-    intent_mut.outcome_mut().approved_by.fill(ctx.sender());
+    account.intents_mut(version::current(), Witness()).get_mut(key).outcome_mut().approved_by.fill(ctx.sender());
 }
 
 /// Disapproves an intent.
-public fun disapprove(
+public fun disapprove_intent(
     account: &mut Account<Payment, Pending>,
     key: String,
     ctx: &TxContext,
 ) {
     account.config().assert_is_member(ctx);
-
-    let outcome_mut = account.intents_mut(version::current(), Witness()).get_mut(key).outcome_mut();
-    assert!(outcome_mut.approved_by.is_some(), ENotApproved);
+    assert!(account.intents().get(key).outcome().approved_by.is_some(), ENotApproved);
     
-    let addr = outcome_mut.approved_by.extract();
-    assert!(addr == ctx.sender(), EWrongCaller);
+    let outcome_mut = account.intents_mut(version::current(), Witness()).get_mut(key).outcome_mut();
+    assert!(outcome_mut.approved_by.extract() == ctx.sender(), EWrongCaller);
 }
 
 /// Anyone can execute an intent, this allows to automate the execution of intents.
@@ -136,18 +131,32 @@ public fun leave(user: &mut User, account: &Account<Payment, Pending>) {
     user.remove_account(account, Witness());
 }
 
+/// Invites can be sent by a Multisig member when added to the Multisig.
+public fun send_invite(account: &Account<Payment, Pending>, recipient: address, ctx: &mut TxContext) {
+    // user inviting must be member
+    account.config().assert_is_member(ctx);
+    // invited user must be member
+    assert!(account.config().get_members().contains(&recipient), ENotMember);
+
+    user::send_invite(account, recipient, Witness(), ctx);
+}
+
 // === View functions ===
 
 public fun get_members(payment: &Payment): VecMap<address, VecSet<String>> {
     payment.members
 }
 
-public fun assert_has_role(payment: &Payment, addr: address, role: String) {
-    assert!(payment.members.get(&addr).contains(&role), ENotRole);
+public fun assert_has_role(payment: &Payment, role: String, ctx: &TxContext) {
+    assert!(payment.members.get(&ctx.sender()).contains(&role), ENotRole);
 }
 
 public fun assert_is_member(payment: &Payment, ctx: &TxContext) {
     assert!(payment.members.contains(&ctx.sender()), ENotMember);
+}
+
+public fun approved_by(pending: &Pending): Option<address> {
+    pending.approved_by
 }
 
 // === Package functions ===
@@ -168,4 +177,16 @@ public(package) fun new_config(
 /// Returns a mutable reference to the Payment configuration.
 public(package) fun config_mut(account: &mut Account<Payment, Pending>): &mut Payment {
     account.config_mut(version::current(), Witness())
+}
+
+// === Test functions ===
+
+#[test_only]
+public fun config_witness(): Witness {
+    Witness()
+}
+
+#[test_only]
+public fun members_mut_for_testing(payment: &mut Payment): &mut VecMap<address, VecSet<String>> {
+    &mut payment.members
 }
