@@ -1,0 +1,13 @@
+[package]
+name = "p2p"
+edition = "2024.beta"
+license = "Apache 2.0"
+authors = ["Aaron (aaron@mcxross.xyz)"]
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
+AccountProtocol = { git = "https://github.com/mcxross/account.tech.git", subdir = "packages/protocol", rev="main" }
+AccountActions = { git = "https://github.com/mcxross/account.tech.git", subdir = "packages/actions", rev="main" }
+
+[addresses]
+p2p = "0x0"
