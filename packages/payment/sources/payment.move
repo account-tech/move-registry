@@ -23,6 +23,7 @@ const ENotMember: u64 = 0;
 const ENotApproved: u64 = 1;
 const EAlreadyApproved: u64 = 2;
 const EWrongCaller: u64 = 3;
+const ENotRole: u64 = 4;
 
 // === Structs ===
 
@@ -81,7 +82,7 @@ public fun empty_outcome(): Pending {
     Pending { approved_by: option::none() }
 }
 
-/// Approves an intent.
+/// Only a member with the required role can approve the intent.
 public fun approve(
     account: &mut Account<Payment, Pending>,
     key: String,
@@ -89,10 +90,12 @@ public fun approve(
 ) {
     account.config().assert_is_member(ctx);
 
-    let outcome_mut = account.intents_mut(version::current(), Witness()).get_mut(key).outcome_mut();
-    assert!(outcome_mut.approved_by.is_none(), EAlreadyApproved);
+    let intent_mut = account.intents_mut(version::current(), Witness()).get_mut(key);
+    account.config().assert_has_role(ctx.sender(), intent_mut.role());
+
+    assert!(intent_mut.outcome_mut().approved_by.is_none(), EAlreadyApproved);
     
-    outcome_mut.approved_by.fill(ctx.sender());
+    intent_mut.outcome_mut().approved_by.fill(ctx.sender());
 }
 
 /// Disapproves an intent.
@@ -139,11 +142,12 @@ public fun get_members(payment: &Payment): VecMap<address, VecSet<String>> {
     payment.members
 }
 
+public fun assert_has_role(payment: &Payment, addr: address, role: String) {
+    assert!(payment.members.get(&addr).contains(&role), ENotRole);
+}
+
 public fun assert_is_member(payment: &Payment, ctx: &TxContext) {
-    assert!(
-        payment.members.contains(&ctx.sender()), 
-        ENotMember
-    );
+    assert!(payment.members.contains(&ctx.sender()), ENotMember);
 }
 
 // === Package functions ===
