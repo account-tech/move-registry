@@ -139,7 +139,7 @@ fun test_invite_and_refuse() {
 fun test_members_accessors() {
     let (mut scenario, extensions, account, clock) = start();
 
-    assert!(account.config().get_members().keys() == vector[OWNER]);
+    assert!(account.config().members().keys() == vector[OWNER]);
     account.config().assert_is_member(scenario.ctx());
     account.config().assert_has_role(full_role(), scenario.ctx());
 

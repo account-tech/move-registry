@@ -136,14 +136,14 @@ public fun send_invite(account: &Account<Payment, Pending>, recipient: address, 
     // user inviting must be member
     account.config().assert_is_member(ctx);
     // invited user must be member
-    assert!(account.config().get_members().contains(&recipient), ENotMember);
+    assert!(account.config().members().contains(&recipient), ENotMember);
 
     user::send_invite(account, recipient, Witness(), ctx);
 }
 
 // === View functions ===
 
-public fun get_members(payment: &Payment): VecMap<address, VecSet<String>> {
+public fun members(payment: &Payment): VecMap<address, VecSet<String>> {
     payment.members
 }
 
