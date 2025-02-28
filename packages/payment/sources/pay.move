@@ -100,7 +100,7 @@ public fun request_pay<CoinType>(
 /// Customer executes the action and transfer coin.
 public fun execute_pay<CoinType>(
     mut executable: Executable,
-    account: &mut Account<Payment, Pending>, 
+    account: &Account<Payment, Pending>, 
     mut coin: Coin<CoinType>,
     clock: &Clock,
     ctx: &mut TxContext,
