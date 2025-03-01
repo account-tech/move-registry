@@ -8,6 +8,7 @@ use sui::coin::Coin;
 
 const ERecipientAlreadyExists: u64 = 0;
 const ERecipientDoesNotExist: u64 = 1;
+const ETotalFeesTooHigh: u64 = 2;
 
 // === Constants ===
 
@@ -59,6 +60,8 @@ public(package) fun process<CoinType>(
     coin: &mut Coin<CoinType>,
     ctx: &mut TxContext
 ) {
+    if (!fees.active) return;
+
     let total_amount = coin.value();
     let mut fees = fees.inner;
 
@@ -87,6 +90,7 @@ public fun add_fee(
 ) {
     assert!(!fees.inner.contains(&recipient), ERecipientAlreadyExists);
     fees.inner.insert(recipient, bps);
+    fees.assert_fees_not_too_high();
 }
 
 public fun edit_fee(
@@ -97,6 +101,7 @@ public fun edit_fee(
 ) {
     assert!(fees.inner.contains(&recipient), ERecipientDoesNotExist);
     *fees.inner.get_mut(&recipient) = bps;
+    fees.assert_fees_not_too_high();
 }
 
 public fun remove_fee(
@@ -108,6 +113,18 @@ public fun remove_fee(
     fees.inner.remove(&recipient);
 }
 
+// === Private Functions ===
+
+fun assert_fees_not_too_high(fees: &Fees) {
+    let (mut fees, mut total_bps) = (fees.inner, 0);
+
+    while (!fees.is_empty()) {
+        let (_, bps) = fees.pop();
+        total_bps = total_bps + bps;
+    };
+
+    assert!(total_bps < FEE_DENOMINATOR / 2, ETotalFeesTooHigh);
+}
 // === Test Functions ===
 
 #[test_only]
