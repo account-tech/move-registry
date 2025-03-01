@@ -36,12 +36,13 @@ fun start(): (Scenario, Extensions, Account<Multisig, Approvals>, Clock) {
     // add core deps
     extensions.add(&cap, b"AccountProtocol".to_string(), @account_protocol, 1);
     extensions.add(&cap, b"AccountMultisig".to_string(), @account_multisig, 1);
-    // Account generic types are dummy types (bool, bool)
+    extensions.add(&cap, b"AccountActions".to_string(), @0x0, 1);
+
     let mut account = multisig::new_account(&extensions, scenario.ctx());
     account.config_mut(version::current(), multisig::config_witness()).add_role_to_multisig(full_role(), 1);
     account.config_mut(version::current(), multisig::config_witness()).member_mut(OWNER).add_role_to_member(full_role());
     let clock = clock::create_for_testing(scenario.ctx());
-    // create world
+
     destroy(cap);
     (scenario, extensions, account, clock)
 }

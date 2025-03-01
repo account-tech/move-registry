@@ -87,7 +87,7 @@ public struct Approvals has copy, drop, store {
 
 /// Init and returns a new Account object.
 /// Creator is added by default with weight and global threshold of 1.
-/// AccountProtocol and AccountMultisig are added as dependencies.
+/// AccountProtocol, AccountMultisig and AccountActions are added as dependencies.
 public fun new_account(
     extensions: &Extensions,
     ctx: &mut TxContext,
@@ -105,13 +105,15 @@ public fun new_account(
     let (ap_addr, ap_version) = extensions.get_latest_for_name(b"AccountProtocol".to_string());
     let (ac_addr, ac_version) = extensions.get_latest_for_name(b"AccountMultisig".to_string());
     // add AccountProtocol and AccountMultisig, minimal dependencies for the Multisig Account to work
+    let (aa_addr, aa_version) = extensions.get_latest_for_name(b"AccountActions".to_string());
+    
     account::new(
         extensions, 
         config, 
         false, // unverified deps not authorized by default
-        vector[b"AccountProtocol".to_string(), b"AccountMultisig".to_string()], 
-        vector[ap_addr, ac_addr], 
-        vector[ap_version, ac_version], 
+        vector[b"AccountProtocol".to_string(), b"AccountMultisig".to_string(), b"AccountActions".to_string()], 
+        vector[ap_addr, ac_addr, aa_addr], 
+        vector[ap_version, ac_version, aa_version], 
         ctx)
 }
 
