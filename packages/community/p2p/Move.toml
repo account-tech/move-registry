@@ -6,8 +6,9 @@ authors = ["Aaron (aaron@mcxross.xyz)"]
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
-AccountProtocol = { git = "https://github.com/mcxross/account.tech.git", subdir = "packages/protocol", rev="main" }
-AccountActions = { git = "https://github.com/mcxross/account.tech.git", subdir = "packages/actions", rev="main" }
+AccountProtocol = { git = "https://github.com/mcxross/move-framework.git", subdir = "packages/protocol", rev="main" }
+AccountActions = { git = "https://github.com/mcxross/move-framework.git", subdir = "packages/actions", rev="main" }
+AccountMultisig = {local = "../../multisig"}
 
 [addresses]
 p2p = "0x0"

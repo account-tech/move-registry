@@ -12,8 +12,9 @@ use sui::clock::Clock;
 use sui::coin::Coin;
 
 use account_actions::vault;
-use account_config::multisig::{Multisig, Approvals};
-use account_config::multisig;
+use account_multisig::config;
+use account_multisig::multisig::{Multisig, Approvals};
+use account_multisig::multisig;
 use account_extensions::extensions::Extensions;
 use account_protocol::account::Account;
 
@@ -86,13 +87,13 @@ public fun create(
 
     let auth = multisig::authenticate(&account, ctx);
 
-    multisig::request_config_multisig(
+    config::request_config_multisig(
         auth,
         multisig::empty_outcome(),
         &mut account,
         string::utf8(MULTISIG_KEY),
         b"Initialize merchant account with social recovery".to_string(),
-        vector[clock.timestamp_ms()],
+        clock.timestamp_ms(),
         clock.timestamp_ms(),
         members,
         weights,
@@ -105,7 +106,7 @@ public fun create(
 
     multisig::approve_intent(&mut account, string::utf8(MULTISIG_KEY), ctx);
     let executable = multisig::execute_intent(&mut account, string::utf8(MULTISIG_KEY), clock);
-    multisig::execute_config_multisig(executable, &mut account);
+    config::execute_config_multisig(executable, &mut account);
 
     open_vault(&mut account, b"default".to_string(), ctx);
 
