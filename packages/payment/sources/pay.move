@@ -19,6 +19,7 @@ use account_protocol::{
 };
 use account_payment::{
     payment::{Payment, Pending},
+    fees::Fees,
     version,
 };
 
@@ -102,22 +103,26 @@ public fun execute_pay<CoinType>(
     mut executable: Executable,
     account: &Account<Payment, Pending>, 
     mut coin: Coin<CoinType>,
+    fees: &Fees,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
     let action: &PayAction<CoinType> = account.process_action(&mut executable, version::current(), PayIntent());
     assert!(coin.value() >= action.amount, EWrongAmount);
+
+    let tips = coin.value() - action.amount;
+    transfer::public_transfer(coin.split(tips, ctx), action.issued_by); 
+    // fees are not taken on tips
+    fees.process(&mut coin, ctx);
+    transfer::public_transfer(coin, account.addr());
     
     event::emit(PayEvent<CoinType> {
         payment_id: action.payment_id,
         timestamp: clock.timestamp_ms(),
         amount: action.amount,
-        tips: coin.value() - action.amount,
+        tips,
         issued_by: action.issued_by,
     });
-
-    transfer::public_transfer(coin.split(action.amount, ctx), account.addr());
-    transfer::public_transfer(coin, action.issued_by); // tips
 
     account.confirm_execution(executable, version::current(), PayIntent());
 }
