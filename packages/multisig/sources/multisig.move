@@ -17,6 +17,8 @@ use sui::{
     vec_set::{Self, VecSet},
     vec_map::{Self, VecMap},
     clock::Clock,
+    coin::Coin,
+    sui::SUI,
 };
 use account_extensions::extensions::Extensions;
 use account_protocol::{
@@ -24,7 +26,10 @@ use account_protocol::{
     executable::Executable,
     user::{Self, User},
 };
-use account_multisig::version;
+use account_multisig::{
+    fees::Fees,
+    version,
+};
 
 // === Errors ===
 
@@ -90,8 +95,12 @@ public struct Approvals has copy, drop, store {
 /// AccountProtocol, AccountMultisig and AccountActions are added as dependencies.
 public fun new_account(
     extensions: &Extensions,
+    fees: &Fees,
+    coin: Coin<SUI>,
     ctx: &mut TxContext,
 ): Account<Multisig, Approvals> {
+    fees.process(coin);
+
     let config = Multisig {
         members: vector[Member { 
             addr: ctx.sender(), 
