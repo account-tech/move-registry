@@ -224,13 +224,6 @@ public fun member(multisig: &Multisig, addr: address): Member {
     multisig.members[idx]
 }
 
-/// Returns a mutable reference to the member associated with the address.
-/// safe because mutable Multisig access is protected by the Account.
-public fun member_mut(multisig: &mut Multisig, addr: address): &mut Member {
-    let idx = multisig.get_member_idx(addr);
-    &mut multisig.members[idx]
-}
-
 /// Returns the index of the member associated with the address.
 public fun get_member_idx(multisig: &Multisig, addr: address): u64 {
     let opt = multisig.members.find_index!(|member| member.addr == addr);
@@ -410,6 +403,12 @@ public fun remove_member(
 ) {
     let idx = multisig.get_member_idx(addr);
     multisig.members.remove(idx);
+}
+
+#[test_only]
+public fun member_mut(multisig: &mut Multisig, addr: address): &mut Member {
+    let idx = multisig.get_member_idx(addr);
+    &mut multisig.members[idx]
 }
 
 #[test_only]
