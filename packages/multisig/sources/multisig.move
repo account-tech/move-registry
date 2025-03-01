@@ -17,6 +17,8 @@ use sui::{
     vec_set::{Self, VecSet},
     vec_map::{Self, VecMap},
     clock::Clock,
+    coin::Coin,
+    sui::SUI,
 };
 use account_extensions::extensions::Extensions;
 use account_protocol::{
@@ -24,7 +26,10 @@ use account_protocol::{
     executable::Executable,
     user::{Self, User},
 };
-use account_multisig::version;
+use account_multisig::{
+    fees::Fees,
+    version,
+};
 
 // === Errors ===
 
@@ -87,11 +92,15 @@ public struct Approvals has copy, drop, store {
 
 /// Init and returns a new Account object.
 /// Creator is added by default with weight and global threshold of 1.
-/// AccountProtocol and AccountMultisig are added as dependencies.
+/// AccountProtocol, AccountMultisig and AccountActions are added as dependencies.
 public fun new_account(
     extensions: &Extensions,
+    fees: &Fees,
+    coin: Coin<SUI>,
     ctx: &mut TxContext,
 ): Account<Multisig, Approvals> {
+    fees.process(coin);
+
     let config = Multisig {
         members: vector[Member { 
             addr: ctx.sender(), 
@@ -105,13 +114,15 @@ public fun new_account(
     let (ap_addr, ap_version) = extensions.get_latest_for_name(b"AccountProtocol".to_string());
     let (ac_addr, ac_version) = extensions.get_latest_for_name(b"AccountMultisig".to_string());
     // add AccountProtocol and AccountMultisig, minimal dependencies for the Multisig Account to work
+    let (aa_addr, aa_version) = extensions.get_latest_for_name(b"AccountActions".to_string());
+    
     account::new(
         extensions, 
         config, 
         false, // unverified deps not authorized by default
-        vector[b"AccountProtocol".to_string(), b"AccountMultisig".to_string()], 
-        vector[ap_addr, ac_addr], 
-        vector[ap_version, ac_version], 
+        vector[b"AccountProtocol".to_string(), b"AccountMultisig".to_string(), b"AccountActions".to_string()], 
+        vector[ap_addr, ac_addr, aa_addr], 
+        vector[ap_version, ac_version, aa_version], 
         ctx)
 }
 
@@ -222,13 +233,6 @@ public fun addresses(multisig: &Multisig): vector<address> {
 public fun member(multisig: &Multisig, addr: address): Member {
     let idx = multisig.get_member_idx(addr);
     multisig.members[idx]
-}
-
-/// Returns a mutable reference to the member associated with the address.
-/// safe because mutable Multisig access is protected by the Account.
-public fun member_mut(multisig: &mut Multisig, addr: address): &mut Member {
-    let idx = multisig.get_member_idx(addr);
-    &mut multisig.members[idx]
 }
 
 /// Returns the index of the member associated with the address.
@@ -410,6 +414,12 @@ public fun remove_member(
 ) {
     let idx = multisig.get_member_idx(addr);
     multisig.members.remove(idx);
+}
+
+#[test_only]
+public fun member_mut(multisig: &mut Multisig, addr: address): &mut Member {
+    let idx = multisig.get_member_idx(addr);
+    &mut multisig.members[idx]
 }
 
 #[test_only]
