@@ -2,6 +2,7 @@ module p2p_ramp::fees;
 
 // === Imports ===
 
+use std::type_name::{Self, TypeName};
 use sui::balance::{Self, Balance};
 use sui::coin::{Self, Coin};
 use sui::event;
@@ -9,159 +10,126 @@ use sui::object::{Self, UID};
 use sui::sui::SUI;
 use sui::transfer;
 use sui::tx_context::TxContext;
+use sui::vec_map::{Self, VecMap};
+use sui::vec_set::{Self, VecSet};
 
-use p2p::p2p::AdminCap;
+use p2p_ramp::p2p::AdminCap;
 
 // === Errors ===
 
-#[error]
-const EInsufficientBalance: vector<u8> = b"Insufficient balance to perform this operation";
-#[error]
-const EInvalidFeePercentage: vector<u8> = b"Fee percentage is invalid or out of range";
-#[error]
-const EFeeCalculationOverflow: vector<u8> = b"Fee calculation resulted in an overflow";
-#[error]
-const EInvalidFixedFee: vector<u8> = b"Specified fixed fee is invalid";
+const ERecipientAlreadyExists: u64 = 0;
+const ERecipientDoesNotExist: u64 = 1;
+const ETotalFeesTooHigh: u64 = 2;
+const ECoinTypeNotWhitelisted: u64 = 3;
 
 // === Constants ===
 
-const FIXED_FEE: u8 = 0;
-const PERCENTAGE_FEE: u8 = 1;
+const FEE_DENOMINATOR: u64 = 10_000;
 
 // === Structs ===
 
-public struct FeeConfig has key, store {
+public struct Fees has key {
     id: UID,
-    fee_type: u8,
-    fixed_fee_amount: u64,
-    percentage_fee_bps: u16,
-    treasury: Balance<SUI>
+    // Map of addresses to their fees in bps
+    inner: VecMap<address, u64>,
+    // Set of allowed coin typestep vov
+    allowed_coins: VecSet<TypeName>
 }
 
-public struct FeeCollected has copy, drop {
-    fee_type: u8,
-    amount: u64,
-    timestamp: u64
-}
-
-public struct FeeUpdated has copy, drop {
-    fee_type: u8,
-    new_value: u64,
-    timestamp: u64
-}
-
+// === Public Functions ===
 
 fun init(ctx: &mut TxContext) {
-    let fee_config = FeeConfig {
+    transfer::share_object(Fees {
         id: object::new(ctx),
-        fee_type: FIXED_FEE,
-        fixed_fee_amount: 1000,
-        percentage_fee_bps: 30,
-        treasury: balance::zero(),
+        inner: vec_map::empty(),
+        allowed_coins: vec_set::empty(),
+    });
+}
+
+// === Package Functions ===
+
+public(package) fun process<CoinType>(
+    fees: &Fees,
+    coin: &mut Coin<CoinType>,
+    ctx: &mut TxContext
+) {
+    let total_amount = coin.value();
+    let mut fees = fees.inner;
+
+    while (!fees.is_empty()) {
+        let (recipient, bps) = fees.pop();
+        let fee_amount = (total_amount * bps) / FEE_DENOMINATOR;
+        transfer::public_transfer(coin.split(fee_amount, ctx), recipient);
     };
-    transfer::public_transfer(fee_config, ctx.sender());
 }
 
-public fun calculate_fee(amount: u64, fee_config: &FeeConfig): u64 {
-    if (fee_config.fee_type == FIXED_FEE) {
-        fee_config.fixed_fee_amount
-    } else {
-        calculate_percentage_fee(amount, fee_config.percentage_fee_bps)
-    }
-}
+// === Admin Functions ===
 
-fun calculate_percentage_fee(amount: u64, fee_bps: u16): u64 {
-    assert!(fee_bps <= 10000, EInvalidFeePercentage);
-    let fee_amount = (amount as u128) * (fee_bps as u128) / 10000u128;
-    (fee_amount as u64)
-}
-
-public fun deduct_fee(
-    payment: &mut Coin<SUI>,
-    fee_config: &mut FeeConfig,
-    ctx: &mut TxContext
-): u64 {
-    let payment_value = payment.value();
-    let fee_amount = calculate_fee(payment_value, fee_config);
-
-    assert!(payment_value >= fee_amount, EInsufficientBalance);
-
-    let fee_coin = payment.split(fee_amount, ctx);
-    let fee_balance = coin::into_balance(fee_coin);
-
-    fee_config.treasury.join(fee_balance);
-
-    event::emit(FeeCollected {
-        fee_type: fee_config.fee_type,
-        amount: fee_amount,
-        timestamp: ctx.epoch()
-    });
-
-    fee_amount
-}
-
-public fun set_fixed_fee(
-    fee_config: &mut FeeConfig,
-    amount: u64,
-    _admin_cap: &AdminCap,
-    ctx: &TxContext
+public fun add_fee(
+    _: &AdminCap, 
+    fees: &mut Fees, 
+    recipient: address, 
+    bps: u64
 ) {
-    assert!(amount > 0, EInvalidFixedFee);
-    fee_config.fee_type = FIXED_FEE;
-    fee_config.fixed_fee_amount = amount;
-
-    event::emit(FeeUpdated {
-        fee_type: FIXED_FEE,
-        new_value: amount,
-        timestamp: ctx.epoch()
-    });
+    assert!(!fees.inner.contains(&recipient), ERecipientAlreadyExists);
+    fees.inner.insert(recipient, bps);
+    fees.assert_fees_not_too_high();
 }
 
-
-public fun set_percentage_fee(
-    fee_config: &mut FeeConfig,
-    fee_bps: u16,
-    _admin_cap: &AdminCap,
-    ctx: &TxContext
+public fun edit_fee(
+    _: &AdminCap, 
+    fees: &mut Fees, 
+    recipient: address, 
+    bps: u64
 ) {
-    assert!(fee_bps <= 10000, EInvalidFeePercentage);
-    fee_config.fee_type = PERCENTAGE_FEE;
-    fee_config.percentage_fee_bps = fee_bps;
-
-    event::emit(FeeUpdated {
-        fee_type: PERCENTAGE_FEE,
-        new_value: (fee_bps as u64),
-        timestamp: ctx.epoch()
-    });
+    assert!(fees.inner.contains(&recipient), ERecipientDoesNotExist);
+    *fees.inner.get_mut(&recipient) = bps;
+    fees.assert_fees_not_too_high();
 }
 
-
-public fun withdraw_fees(
-    fee_config: &mut FeeConfig,
-    amount: u64,
-    recipient: address,
-    _admin_cap: &AdminCap,
-    ctx: &mut TxContext
+public fun remove_fee(
+    _: &AdminCap, 
+    fees: &mut Fees, 
+    recipient: address
 ) {
-    let withdrawal = coin::take(&mut fee_config.treasury, amount, ctx);
-    transfer::public_transfer(withdrawal, recipient);
+    assert!(fees.inner.contains(&recipient), ERecipientDoesNotExist);
+    fees.inner.remove(&recipient);
 }
 
-
-public fun get_fee_type(fee_config: &FeeConfig): u8 {
-    fee_config.fee_type
+public fun allow_coin<T>(
+    _: &AdminCap,
+    fees: &mut Fees,
+) {
+    let type_name = type_name::get<T>();
+    fees.allowed_coins.insert(type_name);
 }
 
-public fun get_fixed_fee(fee_config: &FeeConfig): u64 {
-    fee_config.fixed_fee_amount
+public fun disallow_coin<T>(
+    _: &AdminCap,
+    fees: &mut Fees
+) {
+    let type_name = type_name::get<T>();
+    fees.allowed_coins.remove(&type_name);
 }
 
-public fun get_percentage_fee(fee_config: &FeeConfig): u16 {
-    fee_config.percentage_fee_bps
+public fun is_coin_allowed<T>(fees: &Fees): bool {
+    let type_name = type_name::get<T>();
+    fees.allowed_coins.contains(&type_name)
 }
 
-public fun get_treasury_balance(fee_config: &FeeConfig): u64 {
-    fee_config.treasury.value()
+public fun assert_coin_allowed<T>(fees: &Fees) {
+    assert!(is_coin_allowed<T>(fees), ECoinTypeNotWhitelisted)
 }
 
+// === Private Functions ===
 
+fun assert_fees_not_too_high(fees: &Fees) {
+    let (mut fees, mut total_bps) = (fees.inner, 0);
+
+    while (!fees.is_empty()) {
+        let (_, bps) = fees.pop();
+        total_bps = total_bps + bps;
+    };
+
+    assert!(total_bps < FEE_DENOMINATOR / 2, ETotalFeesTooHigh);
+}
