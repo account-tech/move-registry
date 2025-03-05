@@ -3,17 +3,11 @@ module p2p_ramp::fees;
 // === Imports ===
 
 use std::type_name::{Self, TypeName};
-use sui::balance::{Self, Balance};
-use sui::coin::{Self, Coin};
-use sui::event;
-use sui::object::{Self, UID};
-use sui::sui::SUI;
-use sui::transfer;
-use sui::tx_context::TxContext;
-use sui::vec_map::{Self, VecMap};
-use sui::vec_set::{Self, VecSet};
-
-use p2p_ramp::p2p::AdminCap;
+use sui::{
+    coin::Coin,
+    vec_map::{Self, VecMap},
+    vec_set::{Self, VecSet},
+};
 
 // === Errors ===
 
@@ -36,6 +30,10 @@ public struct Fees has key {
     allowed_coins: VecSet<TypeName>
 }
 
+public struct AdminCap has key, store {
+    id: UID
+}
+
 // === Public Functions ===
 
 fun init(ctx: &mut TxContext) {
@@ -44,6 +42,11 @@ fun init(ctx: &mut TxContext) {
         inner: vec_map::empty(),
         allowed_coins: vec_set::empty(),
     });
+    // we only need one admin cap since it will be held by the dev multisig
+    transfer::public_transfer(
+        AdminCap { id: object::new(ctx) },
+        ctx.sender()
+    );
 }
 
 // === Package Functions ===
