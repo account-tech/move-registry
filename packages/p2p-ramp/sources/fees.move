@@ -49,6 +49,16 @@ fun init(ctx: &mut TxContext) {
     );
 }
 
+// === View Functions ===
+
+public fun inner(fees: &Fees): VecMap<address, u64> {
+    fees.inner
+}
+
+public fun allowed_coins(fees: &Fees): VecSet<TypeName> {
+    fees.allowed_coins
+}
+
 // === Package Functions ===
 
 public(package) fun process<CoinType>(
