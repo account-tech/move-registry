@@ -2,7 +2,7 @@
 /// Provides APIs for creating merchant accounts
 /// as well as posting, completing, and closing ads.
 
-module p2p::merchant;
+module p2p_ramp::merchant;
 
 // === Imports ===
 

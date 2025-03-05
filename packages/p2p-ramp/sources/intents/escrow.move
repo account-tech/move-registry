@@ -1,6 +1,6 @@
 /// This module handles merchants' buy and sell proposals
 
-module p2p::escrow_intents;
+module p2p_ramp::escrow_intents;
 
 // === Imports ===
 

@@ -1,6 +1,6 @@
 /// This module handles supported coin types
 
-module p2p::coin;
+module p2p_ramp::coin;
 
 // === Imports ===
 

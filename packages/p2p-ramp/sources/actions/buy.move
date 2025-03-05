@@ -1,6 +1,6 @@
 /// This module handles the merchants buy post actions
 
-module p2p::buy_actions;
+module p2p_ramp::buy_actions;
 
 // === Imports ===
 

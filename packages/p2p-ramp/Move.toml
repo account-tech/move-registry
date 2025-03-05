@@ -1,0 +1,14 @@
+[package]
+name = "P2PRamp"
+edition = "2024.beta"
+license = "Apache 2.0"
+authors = ["Aaron (aaron@mcxross.xyz)", "Thouny (thouny@tuta.io)"]
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
+AccountProtocol = { git = "https://github.com/account-tech/move-framework.git", subdir = "packages/protocol", rev="main" }
+AccountActions = { git = "https://github.com/account-tech/move-framework.git", subdir = "packages/actions", rev="main" }
+AccountMultisig = {local = "../../multisig"}
+
+[addresses]
+p2p_ramp = "0x0"

@@ -1,6 +1,6 @@
 /// This module handles merchant and user escrow services
 
-module p2p::escrow;
+module p2p_ramp::escrow;
 
 // === Imports ===
 

@@ -1,4 +1,4 @@
-module p2p::fiat;
+module p2p_ramp::fiat;
 
 // === Imports ===
 

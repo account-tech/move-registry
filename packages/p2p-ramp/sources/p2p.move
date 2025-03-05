@@ -1,6 +1,6 @@
 /// This module handles the deployers business
 
-module p2p::p2p;
+module p2p_ramp::p2p;
 
 // === Structs ===
 

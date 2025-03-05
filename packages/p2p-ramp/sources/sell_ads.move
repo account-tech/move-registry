@@ -1,36 +1,32 @@
-/// This module handles all buy ads
+/// This module handles all sell ads
 
-module p2p::buy_ads;
+module p2p_ramp::sell_ads;
 
 use sui::vec_set::{Self, VecSet};
 
-// === Structs ===
-
-public struct BuyAds has key {
+public struct SellAds has key {
     id: UID,
     list: VecSet<ID>
 }
 
-// === Public mutative functions ===
-
 fun init(ctx: &mut TxContext) {
     transfer::share_object(
-        BuyAds {
+        SellAds {
             id: object::new(ctx),
             list: vec_set::empty()
         }
-    )
+    );
 }
 
 public(package) fun add(
-    ads: &mut BuyAds,
+    ads: &mut SellAds,
     ad: ID
 ) {
     ads.list.insert(ad);
 }
 
 public(package) fun remove(
-    ads: &mut BuyAds,
+    ads: &mut SellAds,
     ad: &ID
 ) {
     ads.list.remove(ad);
@@ -38,6 +34,6 @@ public(package) fun remove(
 
 // === View functions ===
 
-public fun size(ads: &BuyAds): u64 {
+public fun size(ads: &SellAds): u64 {
     ads.list.size()
 }

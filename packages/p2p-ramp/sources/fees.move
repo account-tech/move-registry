@@ -1,4 +1,4 @@
-module p2p::fees;
+module p2p_ramp::fees;
 
 // === Imports ===
 

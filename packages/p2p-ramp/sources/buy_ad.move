@@ -1,6 +1,6 @@
 /// This module handles coin buy ads
 
-module p2p::buy_ad;
+module p2p_ramp::buy_ad;
 
 // === Imports ===
 

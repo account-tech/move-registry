@@ -1,4 +1,4 @@
-module p2p::order;
+module p2p_ramp::order;
 
 public struct Order has key, store {
     id: UID,
