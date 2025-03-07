@@ -61,7 +61,7 @@ public fun allowed_coins(fees: &Fees): VecSet<TypeName> {
 
 // === Package Functions ===
 
-public(package) fun process<CoinType>(
+public(package) fun collect<CoinType>(
     fees: &Fees,
     coin: &mut Coin<CoinType>,
     ctx: &mut TxContext

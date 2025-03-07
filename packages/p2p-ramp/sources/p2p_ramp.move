@@ -143,8 +143,12 @@ public fun members(ramp: &P2PRamp): VecSet<address> {
     ramp.members
 }
 
+public fun is_member(ramp: &P2PRamp, addr: address): bool {
+    ramp.members.contains(&addr)
+}
+
 public fun assert_is_member(ramp: &P2PRamp, ctx: &TxContext) {
-    assert!(ramp.members.contains(&ctx.sender()), ENotMember);
+    assert!(is_member(ramp, ctx.sender()), ENotMember);
 }
 
 public fun approved(active: &Active): bool {
