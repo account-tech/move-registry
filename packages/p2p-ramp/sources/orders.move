@@ -14,7 +14,7 @@ use account_protocol::{
 };
 use p2p_ramp::{
     p2p_ramp::{P2PRamp, Active},
-    fees::{Fees, AdminCap},
+    fees::{Self, Fees, AdminCap},
     version,
 };
 
@@ -99,9 +99,13 @@ public fun request_buy<CoinType>(
     fiat_amount: u64,
     fiat_code: String,
     coin_amount: u64,
+    fees: &Fees,
     ctx: &mut TxContext,
 ) {
     account.verify(auth);
+
+    // Only whitelisted fiat allowed for orders
+    fees::assert_fiat_allowed(fiat_code, fees);
 
     let mut intent = account.create_intent(
         key,
@@ -133,9 +137,13 @@ public fun request_sell<CoinType>(
     fiat_amount: u64,
     fiat_code: String,
     coin: Coin<CoinType>,
+    fees: &Fees,
     ctx: &mut TxContext,
 ) {
     account.verify(auth);
+
+    // Only whitelisted fiat allowed for orders
+    fees::assert_fiat_allowed(fiat_code, fees);
 
     let mut intent = account.create_intent(
         key,
