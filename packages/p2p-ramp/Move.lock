@@ -2,58 +2,27 @@
 
 [move]
 version = 3
-manifest_digest = "0A40B8880EC669CF9A1AEEBC65C3B7A32E865E6772EC3017F73DEE5ADD9EF5AA"
-deps_digest = "F9B494B64F0615AED0E98FC12A85B85ECD2BC5185C22D30E7F67786BB52E507C"
+manifest_digest = "109A5F0173BC936D4953DD010AB798AF030EC62C7510F7FBBF65C2FAB88AFDBF"
+deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
-  { id = "AccountActions", name = "AccountActions" },
-  { id = "AccountMultisig", name = "AccountMultisig" },
   { id = "AccountProtocol", name = "AccountProtocol" },
-  { id = "Sui", name = "Sui" },
-]
-
-[[move.package]]
-id = "AccountActions"
-source = { git = "https://github.com/mcxross/move-framework.git", rev = "main", subdir = "packages/actions" }
-
-dependencies = [
-  { id = "AccountExtensions", name = "AccountExtensions" },
-  { id = "AccountProtocol", name = "AccountProtocol" },
-  { id = "Kiosk", name = "Kiosk" },
   { id = "Sui", name = "Sui" },
 ]
 
 [[move.package]]
 id = "AccountExtensions"
-source = { git = "https://github.com/mcxross/move-framework.git", rev = "main", subdir = "packages/extensions" }
+source = { git = "https://github.com/account-tech/move-framework.git", rev = "main", subdir = "packages/extensions" }
 
 dependencies = [
-  { id = "Sui", name = "Sui" },
-]
-
-[[move.package]]
-id = "AccountMultisig"
-source = { local = "../../multisig" }
-
-dependencies = [
-  { id = "AccountExtensions", name = "AccountExtensions" },
-  { id = "AccountProtocol", name = "AccountProtocol" },
   { id = "Sui", name = "Sui" },
 ]
 
 [[move.package]]
 id = "AccountProtocol"
-source = { git = "https://github.com/mcxross/move-framework.git", rev = "main", subdir = "packages/protocol" }
+source = { git = "https://github.com/account-tech/move-framework.git", rev = "main", subdir = "packages/protocol" }
 
 dependencies = [
   { id = "AccountExtensions", name = "AccountExtensions" },
-  { id = "Sui", name = "Sui" },
-]
-
-[[move.package]]
-id = "Kiosk"
-source = { git = "https://github.com/mcxross/apps.git", rev = "testnet", subdir = "kiosk" }
-
-dependencies = [
   { id = "Sui", name = "Sui" },
 ]
 

@@ -6,6 +6,7 @@ use std::string::String;
 use sui::{
     balance::{Self, Balance},
     coin::Coin,
+    event,
 };
 use account_protocol::{
     account::{Account, Auth},
@@ -204,25 +205,28 @@ public fun dispute_order<CoinType>(
     order_id: address,
     ctx: &mut TxContext,
 ) {
+    let config = *account.config();
     let order = get_order_mut<CoinType>(account, order_id);
 
     assert!(
         order.taker.contains(&ctx.sender()) || // taker disputes
-        account.config().is_member(ctx.sender()), // maker disputes
+        config.is_member(ctx.sender()), // maker disputes
         ENotWrongCaller
     );
+
+    event::emit(DisputeEvent { order_id, caller: ctx.sender() });
 
     order.status = Status::Disputed;
 }
 
 public fun execute_buy_order<CoinType>(
-    executable: Executable,
+    mut executable: Executable,
     account: &mut Account<P2PRamp, Active>,
     fees: &mut Fees,
     ctx: &mut TxContext,
 ) {
-    let action: &BuyAction = account.process_action(&mut executable, version::current(), BuyIntent());
-    let order = get_order_mut<CoinType>(account, action.order_id);
+    let order_id = account.process_action<_, _, BuyAction, _>(&mut executable, version::current(), BuyIntent()).order_id;
+    let order = get_order_mut<CoinType>(account, order_id);
     // Executable ensures the maker approved, just need to ensure the taker approved
     assert!(order.status == Status::Confirmed, ENotConfirmed); 
 
@@ -230,18 +234,18 @@ public fun execute_buy_order<CoinType>(
     fees.collect(&mut coin, ctx);
     
     transfer::public_transfer(coin, account.addr());
-    destroy_order<CoinType>(account, action.order_id);
+    destroy_order<CoinType>(account, order_id);
     account.confirm_execution(executable, version::current(), BuyIntent())
 }
 
 public fun execute_sell_order<CoinType>(
-    executable: Executable,
+    mut executable: Executable,
     account: &mut Account<P2PRamp, Active>,
     fees: &mut Fees,
     ctx: &mut TxContext,
 ) {
-    let action: &SellAction = account.process_action(&mut executable, version::current(), SellIntent());
-    let order = get_order_mut<CoinType>(account, action.order_id);
+    let order_id = account.process_action<_, _, SellAction, _>(&mut executable, version::current(), SellIntent()).order_id;
+    let order = get_order_mut<CoinType>(account, order_id);
     // Executable ensures the maker approved, just need to ensure the taker approved
     assert!(order.status == Status::Confirmed, ENotConfirmed); 
 
@@ -249,7 +253,7 @@ public fun execute_sell_order<CoinType>(
     fees.collect(&mut coin, ctx);
 
     transfer::public_transfer(coin, order.taker.extract());
-    destroy_order<CoinType>(account, action.order_id);
+    destroy_order<CoinType>(account, order_id);
     account.confirm_execution(executable, version::current(), SellIntent())
 }
 
@@ -260,10 +264,11 @@ public fun resolve_dispute<CoinType>(
     recipient: address,
     ctx: &mut TxContext,
 ) {
+    let acc_addr = account.addr();
     let order = get_order_mut<CoinType>(account, order_id);
 
     assert!(order.status == Status::Disputed, ENotDisputed);
-    assert!(recipient == order.taker.extract() || recipient == account.addr(), ENotRecipient);
+    assert!(recipient == order.taker.extract() || recipient == acc_addr, ENotRecipient);
 
     transfer::public_transfer(order.coin_balance.withdraw_all().into_coin(ctx), recipient);
     destroy_order<CoinType>(account, order_id);
