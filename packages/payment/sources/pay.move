@@ -113,7 +113,7 @@ public fun execute_pay<CoinType>(
     let tips = coin.value() - action.amount;
     transfer::public_transfer(coin.split(tips, ctx), action.issued_by); 
     // fees are not taken on tips
-    fees.process(&mut coin, ctx);
+    fees.collect(&mut coin, ctx);
     transfer::public_transfer(coin, account.addr());
     
     event::emit(PayEvent<CoinType> {

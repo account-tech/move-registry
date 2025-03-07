@@ -12,14 +12,14 @@ rev = "framework/mainnet"
 [dependencies.AccountProtocol]
 git = "https://github.com/account-tech/move-framework.git"
 subdir = "packages/protocol"
-rev = "main"
+rev = "testnet"
 
 [dependencies.AccountExtensions]
 git = "https://github.com/account-tech/move-framework.git"
 subdir = "packages/extensions"
-rev = "main"
+rev = "testnet"
 
 [addresses]
 account_payment = "0x0"
-account_protocol = "0x4803761efb11498331d8e70c741602dbbe2ddc97f667174931ccc669fd4fb958"
-account_extensions = "0xe59b21cc35bf31b7cbc3e3f309fa810e059e481322ecf96518a608a15503b6d2"
+account_protocol = "0x378bf5c9174a33e4669c95d8e22231c7739b333d97b2a876e6734f755e72ee56"
+account_extensions = "0x94308db2bb8510fe049a2753e1f05ab46c94c8f1e5bd5f163d5173318a3a3d30"

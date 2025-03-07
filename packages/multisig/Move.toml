@@ -12,12 +12,12 @@ rev = "framework/mainnet"
 [dependencies.AccountProtocol]
 git = "https://github.com/account-tech/move-framework.git"
 subdir = "packages/protocol"
-rev = "main"
+rev = "testnet"
 
 [dependencies.AccountExtensions]
 git = "https://github.com/account-tech/move-framework.git"
 subdir = "packages/extensions"
-rev = "main"
+rev = "testnet"
 
 [addresses]
 account_multisig = "0xceacdcf1d8aeb17acb0ad695d2229b818cef98b4fbed673db84ee64ec4b24e86"

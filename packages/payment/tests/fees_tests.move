@@ -4,30 +4,21 @@ module account_payment::fees_tests;
 
 // === Imports ===
 
-use std::string::String;
 use sui::{
     test_utils::destroy,
     test_scenario::{Self as ts, Scenario},
-    clock::{Self, Clock},
     sui::SUI,
     coin::{Self, Coin},
 };
-use account_protocol::{
-    account::Account,
-};
 use account_payment::{
-    payment::{Self, Payment, Pending},
-    pay,
     fees::{Self, Fees, AdminCap},
-    version,
 };
 
 // === Constants ===
 
 const OWNER: address = @0xCAFE;
 const ALICE: address = @0xA11CE;
-const BOB: address = @0xB0B;
-const CUSTOMER: address = @0xBABE;
+const BOB: address = @0xB0B; 
 
 // === Helpers ===
 
@@ -53,22 +44,7 @@ fun end(scenario: Scenario, fees: Fees, cap: AdminCap) {
 fun test_getters() {
     let (scenario, fees, cap) = start();
 
-    assert!(fees.active() == true);
     assert!(fees.inner().is_empty());
-
-    end(scenario, fees, cap);
-}
-
-#[test]
-fun test_set_active() {
-    let (scenario, mut fees, cap) = start();
-    assert!(fees.active() == true);
-
-    cap.set_active(&mut fees, false);
-    assert!(fees.active() == false);
-
-    cap.set_active(&mut fees, true);
-    assert!(fees.active() == true);
 
     end(scenario, fees, cap);
 }
@@ -104,7 +80,7 @@ fun test_process_fees_active() {
     cap.add_fee(&mut fees, BOB, 2000);
 
     let mut coin = coin::mint_for_testing<SUI>(1000, scenario.ctx());
-    fees.process(&mut coin, scenario.ctx());
+    fees.collect(&mut coin, scenario.ctx());
 
     assert!(coin.value() == 700);
     scenario.next_tx(ALICE);
@@ -121,15 +97,11 @@ fun test_process_fees_active() {
 }
 
 #[test]
-fun test_process_fees_inactive() {
-    let (mut scenario, mut fees, cap) = start();
-    cap.set_active(&mut fees, false); // deactivate fees
-
-    cap.add_fee(&mut fees, ALICE, 1000);
-    cap.add_fee(&mut fees, BOB, 2000);
+fun test_collect_fees_empty() {
+    let (mut scenario, fees, cap) = start();
 
     let mut coin = coin::mint_for_testing<SUI>(1000, scenario.ctx());
-    fees.process(&mut coin, scenario.ctx());
+    fees.collect(&mut coin, scenario.ctx());
 
     assert!(coin.value() == 1000);
 
