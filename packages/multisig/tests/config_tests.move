@@ -8,6 +8,8 @@ use sui::{
     test_utils::destroy,
     test_scenario::{Self as ts, Scenario},
     clock::{Self, Clock},
+    coin::{Self, Coin},
+    sui::SUI,
 };
 use account_extensions::extensions::{Self, Extensions, AdminCap};
 use account_protocol::{
@@ -16,39 +18,45 @@ use account_protocol::{
 use account_multisig::{
     multisig::{Self, Multisig, Approvals},
     config,
+    fees::{Self, Fees},
     version,
 };
 
 // === Constants ===
 
 const OWNER: address = @0xCAFE;
+const DECIMALS: u64 = 1_000_000_000; // 10^9
 
 // === Helpers ===
 
-fun start(): (Scenario, Extensions, Account<Multisig, Approvals>, Clock) {
+fun start(): (Scenario, Extensions, Account<Multisig, Approvals>, Fees, Clock) {
     let mut scenario = ts::begin(OWNER);
     // publish package
     extensions::init_for_testing(scenario.ctx());
+    fees::init_for_testing(scenario.ctx());
     // retrieve objects
     scenario.next_tx(OWNER);
     let mut extensions = scenario.take_shared<Extensions>();
     let cap = scenario.take_from_sender<AdminCap>();
+    let fees = scenario.take_shared<Fees>();
     // add core deps
     extensions.add(&cap, b"AccountProtocol".to_string(), @account_protocol, 1);
     extensions.add(&cap, b"AccountMultisig".to_string(), @account_multisig, 1);
-    // Account generic types are dummy types (bool, bool)
-    let mut account = multisig::new_account(&extensions, scenario.ctx());
+    extensions.add(&cap, b"AccountActions".to_string(), @0x0, 1);
+
+    let mut account = multisig::new_account(&extensions, &fees, coin::mint_for_testing<SUI>(10 * DECIMALS, scenario.ctx()), scenario.ctx());
     account.config_mut(version::current(), multisig::config_witness()).add_role_to_multisig(full_role(), 1);
     account.config_mut(version::current(), multisig::config_witness()).member_mut(OWNER).add_role_to_member(full_role());
     let clock = clock::create_for_testing(scenario.ctx());
-    // create world
+
     destroy(cap);
-    (scenario, extensions, account, clock)
+    (scenario, extensions, account, fees, clock)
 }
 
-fun end(scenario: Scenario, extensions: Extensions, account: Account<Multisig, Approvals>, clock: Clock) {
+fun end(scenario: Scenario, extensions: Extensions, account: Account<Multisig, Approvals>, fees: Fees, clock: Clock) {
     destroy(extensions);
     destroy(account);
+    destroy(fees);
     destroy(clock);
     ts::end(scenario);
 }
@@ -63,7 +71,7 @@ fun full_role(): String {
 
 #[test]
 fun test_config_multisig() {
-    let (mut scenario, extensions, mut account, clock) = start();
+    let (mut scenario, extensions, mut account, fees, clock) = start();
     let auth = multisig::authenticate(&account, scenario.ctx());
     let outcome = multisig::empty_outcome();
 
@@ -99,12 +107,12 @@ fun test_config_multisig() {
     assert!(account.config().get_global_threshold() == 2);
     assert!(account.config().get_role_threshold(full_role()) == 1);
 
-    end(scenario, extensions, account, clock);
+    end(scenario, extensions, account, fees, clock);
 }
 
 #[test]
 fun test_config_multisig_deletion() {
-    let (mut scenario, extensions, mut account, mut clock) = start();
+    let (mut scenario, extensions, mut account, fees, mut clock) = start();
     clock.increment_for_testing(1);
     let auth = multisig::authenticate(&account, scenario.ctx());
     let outcome = multisig::empty_outcome();
@@ -129,5 +137,5 @@ fun test_config_multisig_deletion() {
     config::delete_config_multisig(&mut expired);
     expired.destroy_empty();
 
-    end(scenario, extensions, account, clock);
+    end(scenario, extensions, account, fees, clock);
 }
