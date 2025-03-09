@@ -286,9 +286,11 @@ public fun execute_buy_order<CoinType>(
     fees.collect(&mut coin, ctx);
 
     transfer::public_transfer(coin, account_addr);
-
+    // remove specific match
     order.matches.remove(&seller);
 
+    // TODO(as the buy action might still have matches, get around destroying action and executable)
+    // destroy_order<CoinType>(account, order_id);
     account.confirm_execution(executable, version::current(), BuyIntent())
 }
 
@@ -310,8 +312,11 @@ public fun execute_sell_order<CoinType>(
 
     transfer::public_transfer(coin, order_item.taker.extract());
 
+    // remove specific match
     order.matches.remove(&buyer);
 
+    // TODO(as the sell action might still have matches, get around destroying action and executable)
+    // destroy_order<CoinType>(account, order_id);
     account.confirm_execution(executable, version::current(), SellIntent())
 }
 
