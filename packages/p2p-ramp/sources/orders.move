@@ -278,7 +278,7 @@ public fun execute_buy_order<CoinType>(
     let order_id = account.process_action<_, _, BuyAction, _>(&mut executable, version::current(), BuyIntent()).order_id;
     let account_addr = account.addr();
     let order = get_order_mut<CoinType>(account, order_id);
-    let order_item = order.orders.get_mut(&seller);
+    let order_item = order.matches.get_mut(&seller);
     // Executable ensures the maker approved, just need to ensure the taker approved
     assert!(order_item.status == Status::Confirmed, ENotConfirmed);
 
@@ -287,7 +287,7 @@ public fun execute_buy_order<CoinType>(
 
     transfer::public_transfer(coin, account_addr);
 
-    order.orders.remove(&seller);
+    order.matches.remove(&seller);
 
     account.confirm_execution(executable, version::current(), BuyIntent())
 }
@@ -301,7 +301,7 @@ public fun execute_sell_order<CoinType>(
 ) {
     let order_id = account.process_action<_, _, SellAction, _>(&mut executable, version::current(), SellIntent()).order_id;
     let order = get_order_mut<CoinType>(account, order_id);
-    let order_item = order.orders.get_mut(&buyer);
+    let order_item = order.matches.get_mut(&buyer);
     // Executable ensures the maker approved, just need to ensure the taker approved
     assert!(order_item.status == Status::Confirmed, ENotConfirmed);
 
@@ -310,7 +310,7 @@ public fun execute_sell_order<CoinType>(
 
     transfer::public_transfer(coin, order_item.taker.extract());
 
-    order.orders.remove(&buyer);
+    order.matches.remove(&buyer);
 
     account.confirm_execution(executable, version::current(), SellIntent())
 }
