@@ -15,6 +15,7 @@ use sui::{
 use account_extensions::extensions::{Self, Extensions, AdminCap};
 use account_protocol::{
     account::Account,
+    intents,
 };
 use account_payment::{
     payment::{Self, Payment, Pending},
@@ -32,7 +33,7 @@ const CUSTOMER: address = @0xBABE;
 
 // === Helpers ===
 
-fun start(): (Scenario, Extensions, Account<Payment, Pending>, Fees, Clock) {
+fun start(): (Scenario, Extensions, Account<Payment>, Fees, Clock) {
     let mut scenario = ts::begin(OWNER);
     // publish package
     extensions::init_for_testing(scenario.ctx());
@@ -54,7 +55,7 @@ fun start(): (Scenario, Extensions, Account<Payment, Pending>, Fees, Clock) {
     (scenario, extensions, account, fees, clock)
 }
 
-fun end(scenario: Scenario, extensions: Extensions, account: Account<Payment, Pending>, fees: Fees, clock: Clock) {
+fun end(scenario: Scenario, extensions: Extensions, account: Account<Payment>, fees: Fees, clock: Clock) {
     destroy(extensions);
     destroy(account);
     destroy(fees);
@@ -74,16 +75,21 @@ fun full_role(): String {
 fun test_request_execute_pay_no_fees() {
     let (mut scenario, extensions, mut account, fees, clock) = start();
     let auth = payment::authenticate(&account, scenario.ctx());
+
     let outcome = payment::empty_outcome();
+    let params = intents::new_params(
+        b"config".to_string(),
+        b"description".to_string(),
+        vector[0],
+        1,
+        &clock,
+    );
 
     pay::request_pay<SUI>(
         auth,
-        outcome,
         &mut account,
-        b"config".to_string(), 
-        b"description".to_string(), 
-        0,
-        1, 
+        params,
+        outcome,
         10,
         scenario.ctx()
     );
@@ -91,11 +97,12 @@ fun test_request_execute_pay_no_fees() {
 
     // customer pays
     scenario.next_tx(CUSTOMER);
-    let executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
+    let mut executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
     let coin = coin::mint_for_testing<SUI>(10, scenario.ctx());
-    pay::execute_pay(executable, &account, coin, &fees, &clock, scenario.ctx());
+    pay::execute_pay(&mut executable, &account, coin, &fees, &clock, scenario.ctx());
+    account.confirm_execution(executable); 
 
-    let mut expired = account.destroy_empty_intent(b"config".to_string());
+    let mut expired = account.destroy_empty_intent<_, Pending>(b"config".to_string());
     pay::delete_pay<SUI>(&mut expired);
     expired.destroy_empty();
     
@@ -111,16 +118,21 @@ fun test_request_execute_pay_no_fees() {
 fun test_request_execute_pay_with_fees() {
     let (mut scenario, extensions, mut account, mut fees, clock) = start();
     let auth = payment::authenticate(&account, scenario.ctx());
+
     let outcome = payment::empty_outcome();
+    let params = intents::new_params(
+        b"config".to_string(),
+        b"description".to_string(),
+        vector[0],
+        1,
+        &clock,
+    );
 
     pay::request_pay<SUI>(
         auth,
-        outcome,
         &mut account,
-        b"config".to_string(), 
-        b"description".to_string(), 
-        0,
-        1, 
+        params,
+        outcome,
         10,
         scenario.ctx()
     );
@@ -130,11 +142,12 @@ fun test_request_execute_pay_with_fees() {
     fees.set_fees_for_testing(vector[ALICE, BOB], vector[1000, 2000]);
     // customer pays
     scenario.next_tx(CUSTOMER);
-    let executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
+    let mut executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
     let coin = coin::mint_for_testing<SUI>(10, scenario.ctx());
-    pay::execute_pay(executable, &account, coin, &fees, &clock, scenario.ctx());
+    pay::execute_pay(&mut executable, &account, coin, &fees, &clock, scenario.ctx());
+    account.confirm_execution(executable);
 
-    let mut expired = account.destroy_empty_intent(b"config".to_string());
+    let mut expired = account.destroy_empty_intent<_, Pending>(b"config".to_string());
     pay::delete_pay<SUI>(&mut expired);
     expired.destroy_empty();
     
@@ -158,16 +171,21 @@ fun test_request_execute_pay_with_fees() {
 fun test_request_execute_pay_with_tips_no_fees() {
     let (mut scenario, extensions, mut account, fees, clock) = start();
     let auth = payment::authenticate(&account, scenario.ctx());
+
     let outcome = payment::empty_outcome();
+    let params = intents::new_params(
+        b"config".to_string(),
+        b"description".to_string(),
+        vector[0],
+        1,
+        &clock,
+    );
 
     pay::request_pay<SUI>(
         auth,
-        outcome,
         &mut account,
-        b"config".to_string(), 
-        b"description".to_string(), 
-        0,
-        1, 
+        params,
+        outcome,
         10,
         scenario.ctx()
     );
@@ -175,11 +193,12 @@ fun test_request_execute_pay_with_tips_no_fees() {
 
     // customer pays
     scenario.next_tx(CUSTOMER);
-    let executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
+    let mut executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
     let coin = coin::mint_for_testing<SUI>(11, scenario.ctx());
-    pay::execute_pay(executable, &account, coin, &fees, &clock, scenario.ctx());
+    pay::execute_pay(&mut executable, &account, coin, &fees, &clock, scenario.ctx());
+    account.confirm_execution(executable);
 
-    let mut expired = account.destroy_empty_intent(b"config".to_string());
+    let mut expired = account.destroy_empty_intent<_, Pending>(b"config".to_string());
     pay::delete_pay<SUI>(&mut expired);
     expired.destroy_empty();
     
@@ -198,16 +217,21 @@ fun test_request_execute_pay_with_tips_no_fees() {
 fun test_request_execute_pay_with_tips_with_fees() {
     let (mut scenario, extensions, mut account, mut fees, clock) = start();
     let auth = payment::authenticate(&account, scenario.ctx());
+
     let outcome = payment::empty_outcome();
+    let params = intents::new_params(
+        b"config".to_string(),
+        b"description".to_string(),
+        vector[0],
+        1,
+        &clock,
+    );
 
     pay::request_pay<SUI>(
         auth,
-        outcome,
         &mut account,
-        b"config".to_string(), 
-        b"description".to_string(), 
-        0,
-        1, 
+        params,
+        outcome,
         10,
         scenario.ctx()
     );
@@ -217,11 +241,12 @@ fun test_request_execute_pay_with_tips_with_fees() {
     fees.set_fees_for_testing(vector[ALICE, BOB], vector[1000, 2000]);
     // customer pays
     scenario.next_tx(CUSTOMER);
-    let executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
+    let mut executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
     let coin = coin::mint_for_testing<SUI>(11, scenario.ctx());
-    pay::execute_pay(executable, &account, coin, &fees, &clock, scenario.ctx());
+    pay::execute_pay(&mut executable, &account, coin, &fees, &clock, scenario.ctx());
+    account.confirm_execution(executable);
 
-    let mut expired = account.destroy_empty_intent(b"config".to_string());
+    let mut expired = account.destroy_empty_intent<_, Pending>(b"config".to_string());
     pay::delete_pay<SUI>(&mut expired);
     expired.destroy_empty();
     
@@ -249,21 +274,26 @@ fun test_request_delete_pay() {
     let (mut scenario, extensions, mut account, fees, mut clock) = start();
     clock.increment_for_testing(1);
     let auth = payment::authenticate(&account, scenario.ctx());
+
     let outcome = payment::empty_outcome();
+    let params = intents::new_params(
+        b"config".to_string(),
+        b"description".to_string(),
+        vector[0],
+        1,
+        &clock,
+    );
 
     pay::request_pay<SUI>(
         auth,
-        outcome,
         &mut account,
-        b"config".to_string(), 
-        b"description".to_string(), 
-        0,
-        1, 
+        params,
+        outcome,
         10,
         scenario.ctx()
     );
 
-    let mut expired = account.delete_expired_intent(b"config".to_string(), &clock);
+    let mut expired = account.delete_expired_intent<_, Pending>(b"config".to_string(), &clock);
     pay::delete_pay<SUI>(&mut expired);
     expired.destroy_empty();
 
@@ -274,16 +304,21 @@ fun test_request_delete_pay() {
 fun test_request_execute_pay_not_enough() {
     let (mut scenario, extensions, mut account, fees, clock) = start();
     let auth = payment::authenticate(&account, scenario.ctx());
+
     let outcome = payment::empty_outcome();
+    let params = intents::new_params(
+        b"config".to_string(),
+        b"description".to_string(),
+        vector[0],
+        1,
+        &clock,
+    );
 
     pay::request_pay<SUI>(
         auth,
-        outcome,
         &mut account,
-        b"config".to_string(), 
-        b"description".to_string(), 
-        0,
-        1, 
+        params,
+        outcome,
         10,
         scenario.ctx()
     );
@@ -291,9 +326,10 @@ fun test_request_execute_pay_not_enough() {
 
     // customer pays
     scenario.next_tx(CUSTOMER);
-    let executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
+    let mut executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
     let coin = coin::mint_for_testing<SUI>(9, scenario.ctx());
-    pay::execute_pay(executable, &account, coin, &fees, &clock, scenario.ctx());
+    pay::execute_pay(&mut executable, &account, coin, &fees, &clock, scenario.ctx());
+    account.confirm_execution(executable);
 
     end(scenario, extensions, account, fees, clock);
 }
@@ -302,16 +338,21 @@ fun test_request_execute_pay_not_enough() {
 fun test_error_pay_not_role() {
     let (mut scenario, extensions, mut account, fees, clock) = start();
     let auth = payment::authenticate(&account, scenario.ctx());
+
     let outcome = payment::empty_outcome();
+    let params = intents::new_params(
+        b"config".to_string(),
+        b"description".to_string(),
+        vector[0],
+        1,
+        &clock,
+    );
 
     pay::request_pay<SUI>(
         auth,
-        outcome,
         &mut account,
-        b"config".to_string(), 
-        b"description".to_string(), 
-        0,
-        1, 
+        params,
+        outcome,
         10,
         scenario.ctx()
     );
@@ -321,9 +362,10 @@ fun test_error_pay_not_role() {
     
     // customer pays
     scenario.next_tx(CUSTOMER);
-    let executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
+    let mut executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
     let coin = coin::mint_for_testing<SUI>(10, scenario.ctx());
-    pay::execute_pay(executable, &account, coin, &fees, &clock, scenario.ctx());
+    pay::execute_pay(&mut executable, &account, coin, &fees, &clock, scenario.ctx());
+    account.confirm_execution(executable);
 
     end(scenario, extensions, account, fees, clock);
 }

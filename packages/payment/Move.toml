@@ -12,12 +12,12 @@ rev = "framework/mainnet"
 [dependencies.AccountProtocol]
 git = "https://github.com/account-tech/move-framework.git"
 subdir = "packages/protocol"
-rev = "testnet"
+rev = "main"
 
 [dependencies.AccountExtensions]
 git = "https://github.com/account-tech/move-framework.git"
 subdir = "packages/extensions"
-rev = "testnet"
+rev = "main"
 
 [addresses]
 account_payment = "0x0"

@@ -132,7 +132,7 @@ public fun disapprove_intent(
 }
 
 /// Anyone can execute an intent, this allows to automate the execution of intents.
-public fun execute_pending_intent(
+public fun execute_intent(
     account: &mut Account<Payment>, 
     key: String, 
     clock: &Clock,
@@ -140,8 +140,7 @@ public fun execute_pending_intent(
     account.execute_intent!<_, Pending, _>(key, clock, version::current(), ConfigWitness())
 }
 
-public use fun validate_pending_outcome as Pending.validate_outcome;
-public fun validate_pending_outcome(outcome: Pending, _config: &Payment, _role: String) {
+public fun validate_outcome(outcome: Pending, _config: &Payment, _role: String) {
     let Pending { approved_by } = outcome;
     assert!(approved_by.is_some(), ENotApproved);
 }
