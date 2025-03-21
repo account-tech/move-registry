@@ -207,7 +207,7 @@ public fun execute_intent(
     key: String, 
     clock: &Clock,
 ): Executable<Approvals> {
-    account.execute_intent!(key, clock, version::current(), ConfigWitness())
+    account.execute_intent!<_, Approvals, _>(key, clock, version::current(), ConfigWitness())
 }
 
 // Used implicitly by execute_intent!

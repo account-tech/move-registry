@@ -6,14 +6,20 @@ module account_multisig::config;
 
 use std::string::String;
 use account_protocol::{
-    intents::Expired,
+    intents::{Params, Expired},
     executable::Executable,
     account::{Account, Auth},
+    intent_interface,
 };
 use account_multisig::{
     multisig::{Self, Multisig, Approvals},
     version,
 };
+
+// === Aliases ===
+
+use fun intent_interface::build_intent as Account.build_intent;
+use fun intent_interface::process_intent as Account.process_intent;
 
 // === Structs ===
 
@@ -32,12 +38,9 @@ public struct ConfigMultisigAction has drop, store {
 /// Requests new Multisig settings.
 public fun request_config_multisig(
     auth: Auth,
+    account: &mut Account<Multisig>, 
+    params: Params,
     outcome: Approvals,
-    account: &mut Account<Multisig, Approvals>, 
-    key: String,
-    description: String,
-    execution_time: u64,
-    expiration_time: u64,
     // members 
     addresses: vector<address>,
     weights: vector<u64>,
@@ -50,32 +53,33 @@ public fun request_config_multisig(
 ) {
     account.verify(auth);
 
-    let mut intent = account.create_intent(
-        key,
-        description,
-        vector[execution_time],
-        expiration_time,
-        b"".to_string(),
-        outcome,
-        version::current(),
-        ConfigMultisigIntent(),
-        ctx
-    );
-
     let config = multisig::new_config(addresses, weights, roles, global, role_names, role_thresholds);
 
-    account.add_action(&mut intent, ConfigMultisigAction { config }, version::current(), ConfigMultisigIntent());
-    account.add_intent(intent, version::current(), ConfigMultisigIntent());
+    account.build_intent!(
+        params,
+        outcome,
+        b"".to_string(),
+        version::current(),
+        ConfigMultisigIntent(),
+        ctx,
+        |intent, iw| intent.add_action(ConfigMultisigAction { config }, iw)
+    );
 }
 
 /// Executes the action and modifies the Account Multisig.
 public fun execute_config_multisig(
-    mut executable: Executable,
-    account: &mut Account<Multisig, Approvals>, 
+    executable: &mut Executable<Approvals>,
+    account: &mut Account<Multisig>, 
 ) {
-    let action: &ConfigMultisigAction = account.process_action(&mut executable, version::current(), ConfigMultisigIntent());
-    *multisig::config_mut(account) = action.config;
-    account.confirm_execution(executable, version::current(), ConfigMultisigIntent());
+    account.process_intent!(
+        executable, 
+        version::current(),   
+        ConfigMultisigIntent(), 
+        |executable, iw| {
+            let action = executable.next_action<Approvals, ConfigMultisigAction, _>(iw);
+            *multisig::config_mut(account) = action.config;
+        }
+    );
 }
 
 /// Deletes the action in an expired intent.

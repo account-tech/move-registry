@@ -8,12 +8,13 @@ use sui::{
     test_utils::destroy,
     test_scenario::{Self as ts, Scenario},
     clock::{Self, Clock},
-    coin::{Self, Coin},
+    coin,
     sui::SUI,
 };
 use account_extensions::extensions::{Self, Extensions, AdminCap};
 use account_protocol::{
     account::Account,
+    intents,
 };
 use account_multisig::{
     multisig::{Self, Multisig, Approvals},
@@ -29,7 +30,7 @@ const DECIMALS: u64 = 1_000_000_000; // 10^9
 
 // === Helpers ===
 
-fun start(): (Scenario, Extensions, Account<Multisig, Approvals>, Fees, Clock) {
+fun start(): (Scenario, Extensions, Account<Multisig>, Fees, Clock) {
     let mut scenario = ts::begin(OWNER);
     // publish package
     extensions::init_for_testing(scenario.ctx());
@@ -53,7 +54,7 @@ fun start(): (Scenario, Extensions, Account<Multisig, Approvals>, Fees, Clock) {
     (scenario, extensions, account, fees, clock)
 }
 
-fun end(scenario: Scenario, extensions: Extensions, account: Account<Multisig, Approvals>, fees: Fees, clock: Clock) {
+fun end(scenario: Scenario, extensions: Extensions, account: Account<Multisig>, fees: Fees, clock: Clock) {
     destroy(extensions);
     destroy(account);
     destroy(fees);
@@ -73,16 +74,20 @@ fun full_role(): String {
 fun test_config_multisig() {
     let (mut scenario, extensions, mut account, fees, clock) = start();
     let auth = multisig::authenticate(&account, scenario.ctx());
-    let outcome = multisig::empty_outcome();
 
-    config::request_config_multisig(
-        auth,
-        outcome,
-        &mut account,
+    let params = intents::new_params(
         b"config".to_string(), 
         b"description".to_string(), 
-        0,
+        vector[0],
         1, 
+        &clock,
+    );
+    let outcome = multisig::empty_outcome();
+    config::request_config_multisig(
+        auth,
+        &mut account,
+        params,
+        outcome,
         vector[OWNER, @0xBABE], 
         vector[2, 1], 
         vector[vector[full_role()], vector[]], 
@@ -92,10 +97,11 @@ fun test_config_multisig() {
         scenario.ctx()
     );
     multisig::approve_intent(&mut account, b"config".to_string(), scenario.ctx());
-    let executable = multisig::execute_intent(&mut account, b"config".to_string(), &clock);
-    config::execute_config_multisig(executable, &mut account);
+    let mut executable = multisig::execute_intent(&mut account, b"config".to_string(), &clock);
+    config::execute_config_multisig(&mut executable, &mut account);
+    account.confirm_execution(executable);
 
-    let mut expired = account.destroy_empty_intent(b"config".to_string());
+    let mut expired = account.destroy_empty_intent<_, Approvals>(b"config".to_string());
     config::delete_config_multisig(&mut expired);
     expired.destroy_empty();
 
@@ -115,25 +121,29 @@ fun test_config_multisig_deletion() {
     let (mut scenario, extensions, mut account, fees, mut clock) = start();
     clock.increment_for_testing(1);
     let auth = multisig::authenticate(&account, scenario.ctx());
-    let outcome = multisig::empty_outcome();
-
-    config::request_config_multisig(
-        auth,
-        outcome,
-        &mut account, 
+    
+    let params = intents::new_params(
         b"config".to_string(), 
         b"description".to_string(), 
-        0,
+        vector[0],
         1, 
+        &clock,
+    );
+    let outcome = multisig::empty_outcome();
+    config::request_config_multisig(
+        auth,
+        &mut account,
+        params,
+        outcome,
         vector[OWNER, @0xBABE], 
-        vector[2, 1],
+        vector[2, 1], 
         vector[vector[full_role()], vector[]], 
         2, 
         vector[full_role()], 
         vector[1], 
         scenario.ctx()
     );
-    let mut expired = account.delete_expired_intent(b"config".to_string(), &clock);
+    let mut expired = account.delete_expired_intent<_, Approvals>(b"config".to_string(), &clock);
     config::delete_config_multisig(&mut expired);
     expired.destroy_empty();
 
