@@ -20,6 +20,6 @@ subdir = "packages/extensions"
 rev = "main"
 
 [addresses]
-account_payment = "0x0"
-account_protocol = "0x378bf5c9174a33e4669c95d8e22231c7739b333d97b2a876e6734f755e72ee56"
-account_extensions = "0x94308db2bb8510fe049a2753e1f05ab46c94c8f1e5bd5f163d5173318a3a3d30"
+account_payment = "0x9ccc8527361cfb3215f6044a148b9356de3c72d673278df3f4167ee84259e8c5"
+account_protocol = "0x77a39df37fab5b6d47c9976f114ef1ac21313edee5a446135c08fdbaf615b623"
+account_extensions = "0x6e4d4fd65ffc3e7b09969bcfc34d4ec0b5bd640279f0027849884af404e9bc09"
