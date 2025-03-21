@@ -6,22 +6,27 @@ module account_payment::pay;
 
 // === Imports ===
 
-use std::string::String;
 use sui::{
     coin::Coin,
     event,
     clock::Clock,
 };
 use account_protocol::{
-    intents::Expired,
+    intents::{Params, Expired},
     executable::Executable,
     account::{Account, Auth},
+    intent_interface,
 };
 use account_payment::{
     payment::{Payment, Pending},
     fees::Fees,
     version,
 };
+
+// === Aliases ===
+
+use fun intent_interface::build_intent as Account.build_intent;
+use fun intent_interface::process_intent as Account.process_intent;
 
 // === Errors ===
 
@@ -65,28 +70,13 @@ public struct PayAction<phantom CoinType> has drop, store {
 /// Must be immediately approved in the same PTB to enable customer to execute payment.
 public fun request_pay<CoinType>(
     auth: Auth,
+    account: &mut Account<Payment>, 
+    params: Params,
     outcome: Pending,
-    account: &mut Account<Payment, Pending>, 
-    key: String,
-    description: String,
-    execution_time: u64,
-    expiration_time: u64,
     amount: u64,
     ctx: &mut TxContext
 ) {
     account.verify(auth);
-
-    let mut intent = account.create_intent(
-        key,
-        description,
-        vector[execution_time],
-        expiration_time,
-        b"".to_string(),
-        outcome,
-        version::current(),
-        PayIntent(),
-        ctx
-    );
 
     let action = PayAction<CoinType> { 
         payment_id: ctx.fresh_object_address(),
@@ -94,37 +84,49 @@ public fun request_pay<CoinType>(
         issued_by: ctx.sender() 
     };
 
-    account.add_action(&mut intent, action, version::current(), PayIntent());
-    account.add_intent(intent, version::current(), PayIntent());
+    account.build_intent!(
+        params,
+        outcome,
+        b"".to_string(),
+        version::current(),
+        PayIntent(),
+        ctx,
+        |intent, iw| intent.add_action(action, iw)
+    );
 }
 
 /// Customer executes the action and transfer coin.
 public fun execute_pay<CoinType>(
-    mut executable: Executable,
-    account: &Account<Payment, Pending>, 
+    executable: &mut Executable<Pending>,
+    account: &mut Account<Payment>, 
     mut coin: Coin<CoinType>,
     fees: &Fees,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    let action: &PayAction<CoinType> = account.process_action(&mut executable, version::current(), PayIntent());
-    assert!(coin.value() >= action.amount, EWrongAmount);
+    account.process_intent!(
+        executable, 
+        version::current(),   
+        PayIntent(), 
+        |executable, iw| {
+            let action = executable.next_action<_, PayAction<CoinType>, _>(iw);
+            assert!(coin.value() >= action.amount, EWrongAmount);
 
-    let tips = coin.value() - action.amount;
-    transfer::public_transfer(coin.split(tips, ctx), action.issued_by); 
-    // fees are not taken on tips
-    fees.collect(&mut coin, ctx);
-    transfer::public_transfer(coin, account.addr());
-    
-    event::emit(PayEvent<CoinType> {
-        payment_id: action.payment_id,
-        timestamp: clock.timestamp_ms(),
-        amount: action.amount,
-        tips,
-        issued_by: action.issued_by,
-    });
-
-    account.confirm_execution(executable, version::current(), PayIntent());
+            let tips = coin.value() - action.amount;
+            transfer::public_transfer(coin.split(tips, ctx), action.issued_by); 
+            // fees are not taken on tips
+            fees.collect(&mut coin, ctx);
+            transfer::public_transfer(coin, account.addr());
+            
+            event::emit(PayEvent<CoinType> {
+                payment_id: action.payment_id,
+                timestamp: clock.timestamp_ms(),
+                amount: action.amount,
+                tips,
+                issued_by: action.issued_by,
+            });
+        }
+    );
 }
 
 /// Deletes the action in an expired intent.

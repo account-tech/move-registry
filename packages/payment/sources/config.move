@@ -6,14 +6,20 @@ module account_payment::config;
 
 use std::string::String;
 use account_protocol::{
-    intents::Expired,
+    intents::{Params, Expired},
     executable::Executable,
     account::{Account, Auth},
+    intent_interface,
 };
 use account_payment::{
     payment::{Self, Payment, Pending},
     version,
 };
+
+// === Aliases ===
+
+use fun intent_interface::build_intent as Account.build_intent;
+use fun intent_interface::process_intent as Account.process_intent;
 
 // === Structs ===
 
@@ -32,12 +38,9 @@ public struct ConfigPaymentAction has drop, store {
 /// Requests new Payment settings.
 public fun request_config_payment(
     auth: Auth,
+    account: &mut Account<Payment>, 
+    params: Params,
     outcome: Pending,
-    account: &mut Account<Payment, Pending>, 
-    key: String,
-    description: String,
-    execution_time: u64,
-    expiration_time: u64,
     // members 
     addrs: vector<address>,
     roles: vector<vector<String>>,
@@ -45,32 +48,33 @@ public fun request_config_payment(
 ) {
     account.verify(auth);
 
-    let mut intent = account.create_intent(
-        key,
-        description,
-        vector[execution_time],
-        expiration_time,
-        b"".to_string(),
-        outcome,
-        version::current(),
-        ConfigPaymentIntent(),
-        ctx
-    );
-
     let config = payment::new_config(addrs, roles);
 
-    account.add_action(&mut intent, ConfigPaymentAction { config }, version::current(), ConfigPaymentIntent());
-    account.add_intent(intent, version::current(), ConfigPaymentIntent());
+    account.build_intent!(
+        params,
+        outcome,
+        b"".to_string(),
+        version::current(),
+        ConfigPaymentIntent(),
+        ctx,
+        |intent, iw| intent.add_action(ConfigPaymentAction { config }, iw)
+    );
 }
 
 /// Executes the action and modifies the Account Payment.
 public fun execute_config_payment(
-    mut executable: Executable,
-    account: &mut Account<Payment, Pending>, 
+    executable: &mut Executable<Pending>,
+    account: &mut Account<Payment>, 
 ) {
-    let action: &ConfigPaymentAction = account.process_action(&mut executable, version::current(), ConfigPaymentIntent());
-    *payment::config_mut(account) = action.config;
-    account.confirm_execution(executable, version::current(), ConfigPaymentIntent());
+    account.process_intent!(
+        executable, 
+        version::current(),   
+        ConfigPaymentIntent(), 
+        |executable, iw| {
+            let action = executable.next_action<Pending, ConfigPaymentAction, _>(iw);
+            *payment::config_mut(account) = action.config;
+        }
+    );
 }
 
 /// Deletes the action in an expired intent.

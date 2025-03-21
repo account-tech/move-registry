@@ -11,11 +11,19 @@ use sui::{
 };
 use account_extensions::extensions::Extensions;
 use account_protocol::{
-    account::{Self, Account, Auth},
+    account::{Account, Auth},
+    deps,
     executable::Executable,
     user::{Self, User},
+    account_interface,
 };
 use account_payment::version;
+
+// === Aliases ===
+
+use fun account_interface::create_auth as Account.create_auth;
+use fun account_interface::resolve_intent as Account.resolve_intent;
+use fun account_interface::execute_intent as Account.execute_intent;
 
 // === Errors ===
 
@@ -28,7 +36,7 @@ const ENotRole: u64 = 4;
 // === Structs ===
 
 /// Config Witness.
-public struct Witness() has drop;
+public struct ConfigWitness() has drop;
 
 /// Config struct with the members
 public struct Payment has copy, drop, store {
@@ -50,31 +58,33 @@ public struct Pending has copy, drop, store {
 public fun new_account(
     extensions: &Extensions,
     ctx: &mut TxContext,
-): Account<Payment, Pending> {
+): Account<Payment> {
     let config = Payment {
         members: vec_map::from_keys_values(vector[ctx.sender()], vector[vec_set::empty()]),
     };
 
-    let (protocol_addr, protocol_version) = extensions.get_latest_for_name(b"AccountProtocol".to_string());
-    let (payment_addr, payment_version) = extensions.get_latest_for_name(b"AccountPayment".to_string());
-    // add AccountProtocol and AccountPayment, minimal dependencies for the Payment Account to work
-    account::new(
-        extensions, 
-        config, 
-        false, // unverified deps not authorized by default
-        vector[b"AccountProtocol".to_string(), b"AccountPayment".to_string()], 
-        vector[protocol_addr, payment_addr], 
-        vector[protocol_version, payment_version], 
-        ctx)
+    account_interface::create_account!(
+        config,
+        version::current(),
+        ConfigWitness(),
+        ctx,
+        || deps::new_latest_extensions(
+            extensions,
+            vector[b"AccountProtocol".to_string(), b"AccountPayment".to_string()]
+        )
+    )
 }
 
 /// Authenticates the caller as an owner or member of the payment account.
 public fun authenticate(
-    account: &Account<Payment, Pending>,
+    account: &Account<Payment>,
     ctx: &TxContext
 ): Auth {
-    account.config().assert_is_member(ctx);
-    account.new_auth(version::current(), Witness())
+    account.create_auth!(
+        version::current(),
+        ConfigWitness(),
+        || account.config().assert_is_member(ctx)
+    )
 }
 
 /// Creates a new outcome to initiate an intent.
@@ -84,61 +94,77 @@ public fun empty_outcome(): Pending {
 
 /// Only a member with the required role can approve the intent.
 public fun approve_intent(
-    account: &mut Account<Payment, Pending>,
+    account: &mut Account<Payment>,
     key: String,
     ctx: &TxContext,
 ) {
     account.config().assert_is_member(ctx);
-    account.config().assert_has_role(account.intents().get(key).role(), ctx);
-    assert!(account.intents().get(key).outcome().approved_by.is_none(), EAlreadyApproved);
-    
-    account.intents_mut(version::current(), Witness()).get_mut(key).outcome_mut().approved_by.fill(ctx.sender());
+    account.config().assert_has_role(account.intents().get<Pending>(key).role(), ctx);
+        
+    account.resolve_intent!<_, Pending, _>(
+        key, 
+        version::current(), 
+        ConfigWitness(),
+        |outcome| {
+            assert!(outcome.approved_by.is_none(), EAlreadyApproved);
+            outcome.approved_by.fill(ctx.sender());
+        }
+    );
 }
 
 /// Disapproves an intent.
 public fun disapprove_intent(
-    account: &mut Account<Payment, Pending>,
+    account: &mut Account<Payment>,
     key: String,
     ctx: &TxContext,
 ) {
     account.config().assert_is_member(ctx);
-    assert!(account.intents().get(key).outcome().approved_by.is_some(), ENotApproved);
     
-    let outcome_mut = account.intents_mut(version::current(), Witness()).get_mut(key).outcome_mut();
-    assert!(outcome_mut.approved_by.extract() == ctx.sender(), EWrongCaller);
+    account.resolve_intent!<_, Pending, _>(
+        key, 
+        version::current(), 
+        ConfigWitness(),
+        |outcome| {
+            assert!(outcome.approved_by.is_some(), ENotApproved);
+            assert!(outcome.approved_by.extract() == ctx.sender(), EWrongCaller);
+        }
+    );
 }
 
 /// Anyone can execute an intent, this allows to automate the execution of intents.
-public fun execute_intent(
-    account: &mut Account<Payment, Pending>, 
+public fun execute_pending_intent(
+    account: &mut Account<Payment>, 
     key: String, 
     clock: &Clock,
-): Executable {
-    let (executable, outcome) = account.execute_intent(key, clock, version::current(), Witness());
-    assert!(outcome.approved_by.is_some(), ENotApproved);
+): Executable<Pending> {
+    account.execute_intent!<_, Pending, _>(key, clock, version::current(), ConfigWitness())
+}
 
-    executable
+public use fun validate_pending_outcome as Pending.validate_outcome;
+public fun validate_pending_outcome(outcome: Pending, _config: &Payment, _role: String) {
+    let Pending { approved_by } = outcome;
+    assert!(approved_by.is_some(), ENotApproved);
 }
 
 /// Inserts account_id in User, aborts if already joined.
-public fun join(user: &mut User, account: &Account<Payment, Pending>, ctx: &mut TxContext) {
+public fun join(user: &mut User, account: &Account<Payment>, ctx: &mut TxContext) {
     account.config().assert_is_member(ctx);
-    user.add_account(account, Witness());
+    user.add_account(account, ConfigWitness());
 }
 
 /// Removes account_id from User, aborts if not joined.
-public fun leave(user: &mut User, account: &Account<Payment, Pending>) {
-    user.remove_account(account, Witness());
+public fun leave(user: &mut User, account: &Account<Payment>) {
+    user.remove_account(account, ConfigWitness());
 }
 
 /// Invites can be sent by a Multisig member when added to the Multisig.
-public fun send_invite(account: &Account<Payment, Pending>, recipient: address, ctx: &mut TxContext) {
+public fun send_invite(account: &Account<Payment>, recipient: address, ctx: &mut TxContext) {
     // user inviting must be member
     account.config().assert_is_member(ctx);
     // invited user must be member
     assert!(account.config().members().contains(&recipient), ENotMember);
 
-    user::send_invite(account, recipient, Witness(), ctx);
+    user::send_invite(account, recipient, ConfigWitness(), ctx);
 }
 
 // === View functions ===
@@ -175,15 +201,15 @@ public(package) fun new_config(
 }
 
 /// Returns a mutable reference to the Payment configuration.
-public(package) fun config_mut(account: &mut Account<Payment, Pending>): &mut Payment {
-    account.config_mut(version::current(), Witness())
+public(package) fun config_mut(account: &mut Account<Payment>): &mut Payment {
+    account.config_mut(version::current(), ConfigWitness())
 }
 
 // === Test functions ===
 
 #[test_only]
-public fun config_witness(): Witness {
-    Witness()
+public fun config_witness(): ConfigWitness {
+    ConfigWitness()
 }
 
 #[test_only]
