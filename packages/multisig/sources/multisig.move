@@ -158,6 +158,8 @@ public fun approve_intent(
     key: String,
     ctx: &TxContext
 ) {
+    account.config().assert_is_member(ctx);
+
     let role = account.intents().get<Approvals>(key).role();
     let member = account.config().member(ctx.sender());
     let has_role = member.has_role(role);
@@ -182,6 +184,8 @@ public fun disapprove_intent(
     key: String,
     ctx: &TxContext
 ) {
+    account.config().assert_is_member(ctx);
+
     let role = account.intents().get<Approvals>(key).role();
     let member = account.config().member(ctx.sender());
     let has_role = member.has_role(role);
