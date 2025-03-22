@@ -17,7 +17,7 @@ const DECIMALS: u64 = 1_000_000_000; // 10^9
 // === Structs ===
 
 public struct Witness() has drop;
-public struct DummyIntent() has copy, drop;
+public struct DummyIntent() has copy, drop; 
 
 // === Helpers ===
 

@@ -4,11 +4,6 @@ edition = "2024.beta"
 license = "MIT"
 authors = [ "Thouny (thouny@tuta.io)" ]
 
-[dependencies.Sui]
-git = "https://github.com/MystenLabs/sui.git"
-subdir = "crates/sui-framework/packages/sui-framework"
-rev = "framework/mainnet"
-
 [dependencies.AccountProtocol]
 git = "https://github.com/account-tech/move-framework.git"
 subdir = "packages/protocol"
@@ -18,6 +13,7 @@ rev = "main"
 git = "https://github.com/account-tech/move-framework.git"
 subdir = "packages/extensions"
 rev = "main"
+
 
 [addresses]
 account_multisig = "0x5b249579964953a3f49ed605ff0329302c0c218e1603fbb9921e19bfacb901a8"

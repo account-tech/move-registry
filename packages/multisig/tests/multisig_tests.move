@@ -86,6 +86,7 @@ fun create_and_add_dummy_intent(
         vector[0],
         1, 
         clock,
+        scenario.ctx(),
     );
     let outcome = multisig::empty_outcome();
     intent_interface::build_intent!<Multisig, _, _>(
@@ -112,6 +113,7 @@ fun create_and_add_other_intent(
         vector[0],
         1, 
         clock,
+        scenario.ctx(),
     );
     intent_interface::build_intent!<Multisig, _, _>(
         account,
@@ -317,7 +319,7 @@ fun test_intent_execution() {
     // execute intent
     let mut executable = multisig::execute_intent(&mut account, b"dummy".to_string(), &clock);
     executable.next_action<_, bool, _>(DummyIntent());
-    account.confirm_execution(executable);
+    account.confirm_execution(executable); 
 
     let expired = account.destroy_empty_intent<_, Approvals>(b"dummy".to_string());
 

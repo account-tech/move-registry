@@ -81,6 +81,7 @@ fun test_config_multisig() {
         vector[0],
         1, 
         &clock,
+        scenario.ctx(),
     );
     let outcome = multisig::empty_outcome();
     config::request_config_multisig(
@@ -128,6 +129,7 @@ fun test_config_multisig_deletion() {
         vector[0],
         1, 
         &clock,
+        scenario.ctx(),
     );
     let outcome = multisig::empty_outcome();
     config::request_config_multisig(
