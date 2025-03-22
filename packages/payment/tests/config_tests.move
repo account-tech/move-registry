@@ -74,6 +74,7 @@ fun test_config_payment() {
         vector[0],
         1,
         &clock,
+        scenario.ctx(),
     );
 
     config::request_config_payment(
@@ -115,6 +116,7 @@ fun test_config_payment_deletion() {
         vector[0],
         1,
         &clock,
+        scenario.ctx(),
     );
 
     config::request_config_payment(
@@ -146,6 +148,7 @@ fun test_error_config_payment_not_role() {
         vector[0],
         1,
         &clock,
+        scenario.ctx(),
     );
 
     config::request_config_payment(

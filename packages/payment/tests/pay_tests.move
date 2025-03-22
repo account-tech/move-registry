@@ -83,6 +83,7 @@ fun test_request_execute_pay_no_fees() {
         vector[0],
         1,
         &clock,
+        scenario.ctx()
     );
 
     pay::request_pay<SUI>(
@@ -126,6 +127,7 @@ fun test_request_execute_pay_with_fees() {
         vector[0],
         1,
         &clock,
+        scenario.ctx()
     );
 
     pay::request_pay<SUI>(
@@ -179,6 +181,7 @@ fun test_request_execute_pay_with_tips_no_fees() {
         vector[0],
         1,
         &clock,
+        scenario.ctx()
     );
 
     pay::request_pay<SUI>(
@@ -225,6 +228,7 @@ fun test_request_execute_pay_with_tips_with_fees() {
         vector[0],
         1,
         &clock,
+        scenario.ctx()
     );
 
     pay::request_pay<SUI>(
@@ -282,6 +286,7 @@ fun test_request_delete_pay() {
         vector[0],
         1,
         &clock,
+        scenario.ctx()
     );
 
     pay::request_pay<SUI>(
@@ -312,6 +317,7 @@ fun test_request_execute_pay_not_enough() {
         vector[0],
         1,
         &clock,
+        scenario.ctx()
     );
 
     pay::request_pay<SUI>(
@@ -346,6 +352,7 @@ fun test_error_pay_not_role() {
         vector[0],
         1,
         &clock,
+        scenario.ctx(),
     );
 
     pay::request_pay<SUI>(

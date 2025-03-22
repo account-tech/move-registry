@@ -79,6 +79,7 @@ fun create_and_add_dummy_intent(
         vector[0],
         1, 
         clock,
+        scenario.ctx(),
     );
     let outcome = payment::empty_outcome();
     intent_interface::build_intent!<Payment, _, _>(
