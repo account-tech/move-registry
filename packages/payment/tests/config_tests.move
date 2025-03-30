@@ -13,6 +13,7 @@ use sui::{
 use account_extensions::extensions::{Self, Extensions, AdminCap};
 use account_protocol::{
     account::Account,
+    intents,
 };
 use account_payment::{
     payment::{Self, Payment, Pending},
@@ -26,7 +27,7 @@ const OWNER: address = @0xCAFE;
 
 // === Helpers ===
 
-fun start(): (Scenario, Extensions, Account<Payment, Pending>, Clock) {
+fun start(): (Scenario, Extensions, Account<Payment>, Clock) {
     let mut scenario = ts::begin(OWNER);
     // publish package
     extensions::init_for_testing(scenario.ctx());
@@ -46,7 +47,7 @@ fun start(): (Scenario, Extensions, Account<Payment, Pending>, Clock) {
     (scenario, extensions, account, clock)
 }
 
-fun end(scenario: Scenario, extensions: Extensions, account: Account<Payment, Pending>, clock: Clock) {
+fun end(scenario: Scenario, extensions: Extensions, account: Account<Payment>, clock: Clock) {
     destroy(extensions);
     destroy(account);
     destroy(clock);
@@ -65,26 +66,33 @@ fun full_role(): String {
 fun test_config_payment() {
     let (mut scenario, extensions, mut account, clock) = start();
     let auth = payment::authenticate(&account, scenario.ctx());
+
     let outcome = payment::empty_outcome();
+    let params = intents::new_params(
+        b"config".to_string(),
+        b"description".to_string(),
+        vector[0],
+        1,
+        &clock,
+        scenario.ctx(),
+    );
 
     config::request_config_payment(
         auth,
+        &mut account, 
+        params,
         outcome,
-        &mut account,
-        b"config".to_string(), 
-        b"description".to_string(), 
-        0,
-        1, 
         vector[OWNER, @0xBABE], 
         vector[vector[full_role()], vector[]], 
         scenario.ctx()
     );
 
     payment::approve_intent(&mut account, b"config".to_string(), scenario.ctx());
-    let executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
-    config::execute_config_payment(executable, &mut account);
+    let mut executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
+    config::execute_config_payment(&mut executable, &mut account);
+    account.confirm_execution(executable);
 
-    let mut expired = account.destroy_empty_intent(b"config".to_string());
+    let mut expired = account.destroy_empty_intent<_, Pending>(b"config".to_string());
     config::delete_config_payment(&mut expired);
     expired.destroy_empty();
 
@@ -100,22 +108,28 @@ fun test_config_payment_deletion() {
     let (mut scenario, extensions, mut account, mut clock) = start();
     clock.increment_for_testing(1);
     let auth = payment::authenticate(&account, scenario.ctx());
+
     let outcome = payment::empty_outcome();
+    let params = intents::new_params(
+        b"config".to_string(),
+        b"description".to_string(),
+        vector[0],
+        1,
+        &clock,
+        scenario.ctx(),
+    );
 
     config::request_config_payment(
         auth,
-        outcome,
         &mut account,
-        b"config".to_string(), 
-        b"description".to_string(), 
-        0,
-        1, 
+        params,
+        outcome,
         vector[OWNER, @0xBABE], 
         vector[vector[full_role()], vector[]], 
         scenario.ctx()
     );
 
-    let mut expired = account.delete_expired_intent(b"config".to_string(), &clock);
+    let mut expired = account.delete_expired_intent<_, Pending>(b"config".to_string(), &clock);
     config::delete_config_payment(&mut expired);
     expired.destroy_empty();
 
@@ -126,16 +140,22 @@ fun test_config_payment_deletion() {
 fun test_error_config_payment_not_role() {
     let (mut scenario, extensions, mut account, clock) = start();
     let auth = payment::authenticate(&account, scenario.ctx());
+
     let outcome = payment::empty_outcome();
+    let params = intents::new_params(
+        b"config".to_string(),
+        b"description".to_string(),
+        vector[0],
+        1,
+        &clock,
+        scenario.ctx(),
+    );
 
     config::request_config_payment(
         auth,
-        outcome,
         &mut account,
-        b"config".to_string(), 
-        b"description".to_string(), 
-        0,
-        1, 
+        params,
+        outcome,
         vector[OWNER, @0xBABE], 
         vector[vector[full_role()], vector[]], 
         scenario.ctx()
@@ -144,8 +164,9 @@ fun test_error_config_payment_not_role() {
     
     account.config_mut(version::current(), payment::config_witness()).members_mut_for_testing().get_mut(&OWNER).remove(&full_role());
     payment::approve_intent(&mut account, b"config".to_string(), scenario.ctx());
-    let executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
-    config::execute_config_payment(executable, &mut account);
+    let mut executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
+    config::execute_config_payment(&mut executable, &mut account);
+    account.confirm_execution(executable);
 
     end(scenario, extensions, account, clock);
 }

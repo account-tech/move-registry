@@ -15,6 +15,8 @@ use account_extensions::extensions::{Self, Extensions, AdminCap};
 use account_protocol::{
     account::Account,
     user::{Self, Invite},
+    intents,
+    intent_interface,
 };
 use account_payment::{
     payment::{Self, Payment, Pending},
@@ -33,7 +35,7 @@ public struct DummyIntent() has copy, drop;
 
 // === Helpers ===
 
-fun start(): (Scenario, Extensions, Account<Payment, Pending>, Clock) {
+fun start(): (Scenario, Extensions, Account<Payment>, Clock) {
     let mut scenario = ts::begin(OWNER);
     // publish package
     extensions::init_for_testing(scenario.ctx());
@@ -53,7 +55,7 @@ fun start(): (Scenario, Extensions, Account<Payment, Pending>, Clock) {
     (scenario, extensions, account, clock)
 }
 
-fun end(scenario: Scenario, extensions: Extensions, account: Account<Payment, Pending>, clock: Clock) {
+fun end(scenario: Scenario, extensions: Extensions, account: Account<Payment>, clock: Clock) {
     destroy(extensions);
     destroy(account);
     destroy(clock);
@@ -68,21 +70,28 @@ fun full_role(): String {
 
 fun create_and_add_dummy_intent(
     scenario: &mut Scenario,
-    account: &mut Account<Payment, Pending>, 
+    account: &mut Account<Payment>, 
+    clock: &Clock,
 ) {
-    let outcome = payment::empty_outcome();
-    let intent = account.create_intent(
+    let params = intents::new_params(
         b"dummy".to_string(), 
-        b"".to_string(), 
+        b"description".to_string(), 
         vector[0],
         1, 
-        b"Degen".to_string(), 
-        outcome, 
-        version::current(), 
-        DummyIntent(), 
-        scenario.ctx()
+        clock,
+        scenario.ctx(),
     );
-    account.add_intent(intent, version::current(), DummyIntent());
+    let outcome = payment::empty_outcome();
+    intent_interface::build_intent!<Payment, _, _>(
+        account,
+        params,
+        outcome, 
+        b"Degen".to_string(),
+        version::current(),
+        DummyIntent(), 
+        scenario.ctx(),
+        |intent, iw| intent.add_action(true, iw)
+    );
 }
 
 // === Tests ===
@@ -151,14 +160,14 @@ fun test_intent_approval() {
     let (mut scenario, extensions, mut account, clock) = start();
 
     // create intent
-    create_and_add_dummy_intent(&mut scenario, &mut account);
+    create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
     // approve
     payment::approve_intent(&mut account, b"dummy".to_string(), scenario.ctx());
-    let outcome = account.intents().get(b"dummy".to_string()).outcome();
+    let outcome = account.intents().get<Pending>(b"dummy".to_string()).outcome();
     assert!(outcome.approved_by() == option::some(OWNER));
     // disapprove
     payment::disapprove_intent(&mut account, b"dummy".to_string(), scenario.ctx());
-    let outcome = account.intents().get(b"dummy".to_string()).outcome();
+    let outcome = account.intents().get<Pending>(b"dummy".to_string()).outcome();
     assert!(outcome.approved_by() == option::none());
 
     end(scenario, extensions, account, clock);
@@ -169,14 +178,16 @@ fun test_intent_execution() {
     let (mut scenario, extensions, mut account, clock) = start();
 
     // create intent
-    create_and_add_dummy_intent(&mut scenario, &mut account);
+    create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
     // approve
     payment::approve_intent(&mut account, b"dummy".to_string(), scenario.ctx());
     // execute intent
-    let executable = payment::execute_intent(&mut account, b"dummy".to_string(), &clock);
-    let expired = account.destroy_empty_intent(b"dummy".to_string());
+    let mut executable = payment::execute_intent(&mut account, b"dummy".to_string(), &clock);
+    executable.next_action<Pending, bool, _>(DummyIntent());
+    account.confirm_execution(executable);
 
-    destroy(executable);
+    let expired = account.destroy_empty_intent<_, Pending>(b"dummy".to_string());
+
     destroy(expired);
     end(scenario, extensions, account, clock);
 }
@@ -186,8 +197,8 @@ fun test_intent_deletion() {
     let (mut scenario, extensions, mut account, mut clock) = start();
     clock.increment_for_testing(1);
 
-    create_and_add_dummy_intent(&mut scenario, &mut account);
-    let expired = account.delete_expired_intent(b"dummy".to_string(), &clock);
+    create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
+    let expired = account.delete_expired_intent<_, Pending>(b"dummy".to_string(), &clock);
 
     destroy(expired);
     end(scenario, extensions, account, clock);
@@ -197,7 +208,7 @@ fun test_intent_deletion() {
 fun test_error_approve_not_member() {
     let (mut scenario, extensions, mut account, clock) = start();
 
-    create_and_add_dummy_intent(&mut scenario, &mut account);
+    create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
     account.config_mut(version::current(), payment::config_witness()).members_mut_for_testing().remove(&OWNER);
     payment::approve_intent(&mut account, b"dummy".to_string(), scenario.ctx());
 
@@ -208,7 +219,7 @@ fun test_error_approve_not_member() {
 fun test_error_approve_not_role() {
     let (mut scenario, extensions, mut account, clock) = start();
 
-    create_and_add_dummy_intent(&mut scenario, &mut account);
+    create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
     account.config_mut(version::current(), payment::config_witness()).members_mut_for_testing().get_mut(&OWNER).remove(&full_role());
     payment::approve_intent(&mut account, b"dummy".to_string(), scenario.ctx());
 
@@ -219,7 +230,7 @@ fun test_error_approve_not_role() {
 fun test_error_approve_already_approved() {
     let (mut scenario, extensions, mut account, clock) = start();
 
-    create_and_add_dummy_intent(&mut scenario, &mut account);
+    create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
     payment::approve_intent(&mut account, b"dummy".to_string(), scenario.ctx());
     payment::approve_intent(&mut account, b"dummy".to_string(), scenario.ctx());
 
@@ -230,7 +241,7 @@ fun test_error_approve_already_approved() {
 fun test_error_disapprove_not_member() {
     let (mut scenario, extensions, mut account, clock) = start();
 
-    create_and_add_dummy_intent(&mut scenario, &mut account);
+    create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
     account.config_mut(version::current(), payment::config_witness()).members_mut_for_testing().remove(&OWNER);
 
     payment::approve_intent(&mut account, b"dummy".to_string(), scenario.ctx());
@@ -243,7 +254,7 @@ fun test_error_disapprove_not_member() {
 fun test_error_disapprove_not_approved() {
     let (mut scenario, extensions, mut account, clock) = start();
 
-    create_and_add_dummy_intent(&mut scenario, &mut account);
+    create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
     payment::disapprove_intent(&mut account, b"dummy".to_string(), scenario.ctx());
 
     end(scenario, extensions, account, clock);
@@ -254,7 +265,7 @@ fun test_error_disapprove_wrong_caller() {
     let (mut scenario, extensions, mut account, clock) = start();
     account.config_mut(version::current(), payment::config_witness()).members_mut_for_testing().insert(@0xB0B, vec_set::empty());
 
-    create_and_add_dummy_intent(&mut scenario, &mut account);
+    create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
     payment::approve_intent(&mut account, b"dummy".to_string(), scenario.ctx());
 
     scenario.next_tx(@0xB0B);
@@ -267,7 +278,7 @@ fun test_error_disapprove_wrong_caller() {
 fun test_error_execute_not_approved() {
     let (mut scenario, extensions, mut account, clock) = start();
 
-    create_and_add_dummy_intent(&mut scenario, &mut account);
+    create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
     let executable = payment::execute_intent(&mut account, b"dummy".to_string(), &clock);
 
     destroy(executable);

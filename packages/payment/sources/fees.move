@@ -18,8 +18,6 @@ const FEE_DENOMINATOR: u64 = 10_000;
 
 public struct Fees has key {
     id: UID,
-    // Whether the fees are active.
-    active: bool,
     // Recipients and their corresponding basis points.
     inner: VecMap<address, u64>,
 }
@@ -38,7 +36,6 @@ fun init(ctx: &mut TxContext) {
 
     transfer::share_object(Fees {
         id: object::new(ctx),
-        active: true,
         inner: vec_map::empty(),
     });
 }
@@ -49,19 +46,13 @@ public fun inner(fees: &Fees): VecMap<address, u64> {
     fees.inner
 }
 
-public fun active(fees: &Fees): bool {
-    fees.active
-}
-
 // === Package Functions ===
 
-public(package) fun process<CoinType>(
+public(package) fun collect<CoinType>(
     fees: &Fees,
     coin: &mut Coin<CoinType>,
     ctx: &mut TxContext
 ) {
-    if (!fees.active) return;
-
     let total_amount = coin.value();
     let mut fees = fees.inner;
 
@@ -73,14 +64,6 @@ public(package) fun process<CoinType>(
 }
 
 // === Admin Functions ===
-
-public fun set_active(
-    _: &AdminCap, 
-    fees: &mut Fees, 
-    active: bool
-) {
-    fees.active = active;
-}
 
 public fun add_fee(
     _: &AdminCap, 

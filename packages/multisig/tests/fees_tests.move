@@ -1,34 +1,23 @@
 #[test_only]
 module account_multisig::fees_tests;
 
-use std::string::String;
 use sui::{
     test_utils::destroy,
     test_scenario::{Self as ts, Scenario},
-    clock::{Self, Clock},
     coin::{Self, Coin},
     sui::SUI,
 };
-use account_protocol::{
-    account::Account,
-    user::{Self, Invite},
-};
-use account_multisig::{
-    multisig::{Self, Multisig, Approvals},
-    fees::{Self, Fees, AdminCap},
-    version,
-};
+use account_multisig::fees::{Self, Fees, AdminCap};
 
 // === Constants ===
 
 const OWNER: address = @0xCAFE;
-const ALICE: address = @0xA11CE;
 const DECIMALS: u64 = 1_000_000_000; // 10^9
 
 // === Structs ===
 
 public struct Witness() has drop;
-public struct DummyIntent() has copy, drop;
+public struct DummyIntent() has copy, drop; 
 
 // === Helpers ===
 

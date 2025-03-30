@@ -2,7 +2,7 @@
 
 [move]
 version = 3
-manifest_digest = "0215837D5C185BD7494614B0FEB8F01D310AD56FAA5CE67A52C99D367689EAF0"
+manifest_digest = "7B839D532A62A1CAC53D8D603348D4791AEA5C5BBCB883257F06C89DB6C04311"
 deps_digest = "CAFAD8A7CF51067FB4358215BECB86BD100DD64E57C2AC8A7AE7D74B688F5965"
 dependencies = [
   { id = "AccountExtensions", name = "AccountExtensions" },
@@ -83,11 +83,3 @@ dependencies = [
 compiler-version = "1.45.1"
 edition = "2024.beta"
 flavor = "sui"
-
-[env]
-
-[env.testnet]
-chain-id = "4c78adac"
-original-published-id = "0xceacdcf1d8aeb17acb0ad695d2229b818cef98b4fbed673db84ee64ec4b24e86"
-latest-published-id = "0xceacdcf1d8aeb17acb0ad695d2229b818cef98b4fbed673db84ee64ec4b24e86"
-published-version = "1"
