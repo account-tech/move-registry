@@ -6,6 +6,7 @@ module account_payment::pay;
 
 // === Imports ===
 
+use std::string::String;
 use sui::{
     coin::Coin,
     event,
@@ -36,7 +37,7 @@ const EWrongAmount: u64 = 0;
 
 public struct PayEvent<phantom CoinType> has copy, drop {
     // payment id
-    payment_id: address,
+    payment_id: String,
     // time when the intent was executed (payment made)
     timestamp: u64,
     // payment amount without tips
@@ -54,8 +55,6 @@ public struct PayIntent() has copy, drop;
 
 /// Action wrapping a Payment struct into an action.
 public struct PayAction<phantom CoinType> has drop, store {
-    // random id to identify payment
-    payment_id: address,
     // amount to be paid
     amount: u64,
     // creator address
@@ -79,7 +78,6 @@ public fun request_pay<CoinType>(
     account.verify(auth);
 
     let action = PayAction<CoinType> { 
-        payment_id: ctx.fresh_object_address(),
         amount, 
         issued_by: ctx.sender() 
     };
@@ -119,7 +117,7 @@ public fun execute_pay<CoinType>(
             transfer::public_transfer(coin, account.addr());
             
             event::emit(PayEvent<CoinType> {
-                payment_id: action.payment_id,
+                payment_id: executable.intent().key(),
                 timestamp: clock.timestamp_ms(),
                 amount: action.amount,
                 tips,
