@@ -14,8 +14,12 @@ git = "https://github.com/account-tech/move-framework.git"
 subdir = "packages/extensions"
 rev = "main"
 
+[dependencies.Sui]
+git = "https://github.com/MystenLabs/sui.git"
+subdir = "crates/sui-framework/packages/sui-framework"
+rev = "testnet"
 
 [addresses]
-account_multisig = "0x5b249579964953a3f49ed605ff0329302c0c218e1603fbb9921e19bfacb901a8"
-account_protocol = "0x77a39df37fab5b6d47c9976f114ef1ac21313edee5a446135c08fdbaf615b623"
-account_extensions = "0x6e4d4fd65ffc3e7b09969bcfc34d4ec0b5bd640279f0027849884af404e9bc09"
+account_multisig = "0x5dc85f69022101e075affe09af643b8bdd99c50fd1e4611a3660621c5c63de6a"
+account_protocol = "0x5f7b38cbec63d97799d5b82f5231e030da5f5f0065282a63ab43cdde448d38a5"
+account_extensions = "0x352d1a7f5e8564c8015317691511bc155817c7481deb1c66ee2615cfef41244e"
