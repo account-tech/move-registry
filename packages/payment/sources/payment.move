@@ -99,7 +99,13 @@ public fun approve_intent(
     ctx: &TxContext,
 ) {
     account.config().assert_is_member(ctx);
-    account.config().assert_has_role(account.intents().get<Pending>(key).role(), ctx);
+
+    let mut config_intent_type = @account_payment.to_string();
+    config_intent_type.append_utf8(b"::config::ConfigPaymentIntent");
+    // config intent can be executed by any member
+    if (account.intents().get<Pending>(key).type_().into_string().to_string() != config_intent_type) {
+        account.config().assert_has_role(account.intents().get<Pending>(key).role(), ctx);
+    };
         
     account.resolve_intent!<_, Pending, _>(
         key, 

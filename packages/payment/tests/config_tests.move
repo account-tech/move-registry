@@ -39,8 +39,8 @@ fun start(): (Scenario, Extensions, Account<Payment>, Clock) {
     extensions.add(&cap, b"AccountProtocol".to_string(), @account_protocol, 1);
     extensions.add(&cap, b"AccountPayment".to_string(), @account_payment, 1);
     // Account generic types are dummy types (bool, bool)
-    let mut account = payment::new_account(&extensions, scenario.ctx());
-    account.config_mut(version::current(), payment::config_witness()).members_mut_for_testing().get_mut(&OWNER).insert(full_role());
+    let account = payment::new_account(&extensions, scenario.ctx());
+    // account.config_mut(version::current(), payment::config_witness()).members_mut_for_testing().get_mut(&OWNER).insert(full_role());
     let clock = clock::create_for_testing(scenario.ctx());
     // create world
     destroy(cap);
@@ -136,8 +136,8 @@ fun test_config_payment_deletion() {
     end(scenario, extensions, account, clock);
 }
 
-#[test, expected_failure(abort_code = payment::ENotRole)]
-fun test_error_config_payment_not_role() {
+#[test, expected_failure(abort_code = payment::ENotMember)]
+fun test_error_config_payment_not_member() {
     let (mut scenario, extensions, mut account, clock) = start();
     let auth = payment::authenticate(&account, scenario.ctx());
 
@@ -161,8 +161,7 @@ fun test_error_config_payment_not_role() {
         scenario.ctx()
     );
 
-    
-    account.config_mut(version::current(), payment::config_witness()).members_mut_for_testing().get_mut(&OWNER).remove(&full_role());
+    scenario.next_tx(@0xBABE);
     payment::approve_intent(&mut account, b"config".to_string(), scenario.ctx());
     let mut executable = payment::execute_intent(&mut account, b"config".to_string(), &clock);
     config::execute_config_payment(&mut executable, &mut account);
