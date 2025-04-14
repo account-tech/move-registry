@@ -2,7 +2,7 @@
 
 [move]
 version = 3
-manifest_digest = "65F0313FB458DB62207A5F9C5998229A4F38C81DCBC491AF31B3145A789135AE"
+manifest_digest = "7458D9D9088C2269FB1348529EF2674602C91CAFA66C17697FB977A3AE3191DB"
 deps_digest = "060AD7E57DFB13104F21BE5F5C3759D03F0553FC3229247D9A7A6B45F50D03A3"
 dependencies = [
   { id = "AccountExtensions", name = "AccountExtensions" },
@@ -12,7 +12,7 @@ dependencies = [
 
 [[move.package]]
 id = "AccountExtensions"
-source = { local = "../extensions" }
+source = { local = "../../../move-framework/packages/extensions" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -20,7 +20,7 @@ dependencies = [
 
 [[move.package]]
 id = "AccountProtocol"
-source = { local = "../protocol" }
+source = { local = "../../../move-framework/packages/protocol" }
 
 dependencies = [
   { id = "AccountExtensions", name = "AccountExtensions" },
@@ -43,6 +43,6 @@ dependencies = [
 
 [env.testnet]
 chain-id = "4c78adac"
-original-published-id = "0x5dc85f69022101e075affe09af643b8bdd99c50fd1e4611a3660621c5c63de6a"
-latest-published-id = "0x5dc85f69022101e075affe09af643b8bdd99c50fd1e4611a3660621c5c63de6a"
+original-published-id = "0x45473e7747b0f740c3cdf51cc255f3dc5ff9a628da6899860865b7ff82afcc1a"
+latest-published-id = "0x45473e7747b0f740c3cdf51cc255f3dc5ff9a628da6899860865b7ff82afcc1a"
 published-version = "1"
