@@ -3,7 +3,10 @@ module account_payment::payment;
 
 // === Imports ===
 
-use std::string::String;
+use std::{
+    string::String,
+    type_name,
+};
 use sui::{
     vec_set::{Self, VecSet},
     vec_map::{Self, VecMap},
@@ -99,8 +102,8 @@ public fun approve_intent(
     ctx: &TxContext,
 ) {
     account.config().assert_is_member(ctx);
-
-    let mut config_intent_type = @account_payment.to_string();
+    // get the initial package id to get the intent type
+    let mut config_intent_type = type_name::get<ConfigWitness>().get_address().to_string();
     config_intent_type.append_utf8(b"::config::ConfigPaymentIntent");
     // config intent can be executed by any member
     if (account.intents().get<Pending>(key).type_().into_string().to_string() != config_intent_type) {
