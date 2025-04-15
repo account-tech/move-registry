@@ -340,7 +340,10 @@ public(package) fun new_config(
     role_names: vector<String>,
     role_thresholds: vector<u64>,
 ): Multisig {
-    verify_new_rules(members_addrs, members_weights, members_roles, global_threshold, role_names, role_thresholds);
+    verify_new_rules(
+        members_addrs, members_weights, members_roles, 
+        global_threshold, role_names, role_thresholds
+    );
 
     let mut members = vector[];
     let mut roles = vector[];
