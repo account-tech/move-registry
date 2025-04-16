@@ -207,7 +207,15 @@ public fun execute_intent(
     key: String, 
     clock: &Clock,
 ): Executable<Approvals> {
-    account.execute_intent!<_, Approvals, _>(key, clock, version::current(), ConfigWitness())
+    let role = account.intents().get<Approvals>(key).role();
+
+    account.execute_intent!<_, Approvals, _>(
+        key, 
+        clock, 
+        version::current(), 
+        ConfigWitness(),
+        |outcome| outcome.validate_outcome(account.config(), role)
+    )
 }
 
 // Used implicitly by execute_intent!
