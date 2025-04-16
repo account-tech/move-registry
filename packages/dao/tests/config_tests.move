@@ -17,7 +17,7 @@ use account_protocol::{
     intents,
 };
 use account_dao::{
-    dao::{Self, Dao, Votes},
+    dao::{Self, Dao, Votes, Registry},
     config,
 };
 
@@ -44,12 +44,14 @@ public struct Obj has key, store {
 
 // === Helpers ===
 
-fun start(): (Scenario, Extensions, Account<Dao>, Clock) {
+fun start(): (Scenario, Extensions, Registry, Account<Dao>, Clock) {
     let mut scenario = ts::begin(BOB);
     // publish package
     extensions::init_for_testing(scenario.ctx());
+    dao::init_for_testing(scenario.ctx());
     // retrieve objects
     scenario.next_tx(BOB);
+    let mut registry = scenario.take_shared<Registry>();
     let mut extensions = scenario.take_shared<Extensions>();
     let cap = scenario.take_from_sender<AdminCap>();
     // add core deps
@@ -57,15 +59,16 @@ fun start(): (Scenario, Extensions, Account<Dao>, Clock) {
     extensions.add(&cap, b"AccountDao".to_string(), @account_dao, 1);
     extensions.add(&cap, b"AccountActions".to_string(), @0xAC, 1);
 
-    let account = dao::new_account<Coin<SUI>>(&extensions, 1,0,LINEAR,10,3,5,scenario.ctx());
+    let account = dao::new_account<Coin<SUI>>(&mut registry, &extensions, 1,0,LINEAR,10,3,5,scenario.ctx());
     let clock = clock::create_for_testing(scenario.ctx());
 
     destroy(cap);
-    (scenario, extensions, account, clock)
+    (scenario, extensions, registry, account, clock)
 }
 
-fun end(scenario: Scenario, extensions: Extensions, account: Account<Dao>, clock: Clock) {
+fun end(scenario: Scenario, extensions: Extensions, registry: Registry, account: Account<Dao>, clock: Clock) {
     destroy(extensions);
+    destroy(registry);
     destroy(account);
     destroy(clock);
     ts::end(scenario);
@@ -75,7 +78,7 @@ fun end(scenario: Scenario, extensions: Extensions, account: Account<Dao>, clock
 
 #[test]
 fun test_config_dao() {
-    let (mut scenario, extensions, mut account, mut clock) = start();
+    let (mut scenario, extensions, registry, mut account, mut clock) = start();
 
     let mut staked = dao::new_staked_coin<SUI>(&mut account, scenario.ctx());
     staked.stake_coin(coin::mint_for_testing<SUI>(10, scenario.ctx()));
@@ -127,12 +130,12 @@ fun test_config_dao() {
     assert!(dao.voting_quorum() == 6);
 
     destroy(vote);
-    end(scenario, extensions, account, clock);
+    end(scenario, extensions, registry, account, clock);
 }
 
 #[test]
 fun test_config_dao_deletion() {
-    let (mut scenario, extensions, mut account, mut clock) = start();
+    let (mut scenario, extensions, registry, mut account, mut clock) = start();
 
     let mut staked = dao::new_staked_coin<SUI>(&mut account, scenario.ctx());
     staked.stake_coin(coin::mint_for_testing<SUI>(10, scenario.ctx()));
@@ -168,5 +171,5 @@ fun test_config_dao_deletion() {
     expired.destroy_empty();
 
     destroy(staked);
-    end(scenario, extensions, account, clock);
+    end(scenario, extensions, registry, account, clock);
 }

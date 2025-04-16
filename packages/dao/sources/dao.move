@@ -30,6 +30,7 @@ use sui::{
     clock::Clock,
     vec_map::{Self, VecMap},
     coin::{Self, Coin},
+    table_vec::{Self, TableVec},
 };
 use account_extensions::extensions::Extensions;
 use account_protocol::{
@@ -85,6 +86,12 @@ const EInvalidAssetType: u64 = 15;
 // === Structs ===
 
 public struct ConfigWitness() has drop;
+
+public struct Registry has key {
+    id: UID,
+    // addresses of all known daos 
+    daos: TableVec<address>
+}
 
 /// Parent struct protecting the config
 public struct Dao has copy, drop, store {
@@ -168,8 +175,18 @@ public enum Adapter<Asset: store> has store {
 
 // === [ACCOUNT] Public functions ===
 
+fun init(ctx: &mut TxContext) {
+    transfer::share_object(
+        Registry {
+            id: object::new(ctx),
+            daos: table_vec::empty(ctx),
+        }
+    );
+}
+
 /// Init and returns a new Account object
 public fun new_account<AssetType>(
+    registry: &mut Registry,
     extensions: &Extensions,
     auth_voting_power: u64,
     unstaking_cooldown: u64,
@@ -192,7 +209,7 @@ public fun new_account<AssetType>(
         minimum_votes,
     };
 
-    account_interface::create_account!(
+    let account = account_interface::create_account!(
         config,
         version::current(),
         ConfigWitness(),
@@ -201,7 +218,11 @@ public fun new_account<AssetType>(
             extensions,
             vector[b"AccountProtocol".to_string(), b"AccountDao".to_string(), b"AccountActions".to_string()]
         )
-    )
+    );
+
+    registry.daos.push_back(account.addr());
+
+    account
 }
 
 /// Authenticates the caller as a member (!= participant) of the DAO 
@@ -658,6 +679,11 @@ fun get_voting_power<Asset: store>(
 }
 
 // === Tests ===
+
+#[test_only]
+public fun init_for_testing(ctx: &mut TxContext) {
+    init(ctx);
+}
 
 #[test_only]
 public fun set_asset_type_for_testing<Asset>(account: &mut Account<Dao>) {
