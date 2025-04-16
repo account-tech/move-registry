@@ -290,6 +290,50 @@ public fun stake_object<Asset: key + store>(
     }
 }
 
+public fun merge_staked_coin<CoinType>(
+    staked: &mut Staked<Coin<CoinType>>,
+    to_merge: Staked<Coin<CoinType>>,
+) {
+    let Staked { id, value, unstaked, asset, ..  } = to_merge;
+    assert!(unstaked.is_none() && staked.unstaked.is_none(), EAlreadyUnstaked);
+    id.delete();
+
+    let coin = match (asset) {
+        Adapter::Fungible(coin) => coin,
+        Adapter::NonFungible(_notcoin) => abort ENotFungible,
+    };
+
+    match (&mut staked.asset) {
+        Adapter::Fungible(staked_coin) => {
+            staked.value = staked.value + value;
+            staked_coin.join(coin);
+        },
+        _ => abort ENotFungible,
+    };
+}
+
+public fun merge_staked_object<Asset: key + store>(
+    staked: &mut Staked<Asset>,
+    to_merge: Staked<Asset>,
+) {
+    let Staked { id, value, unstaked, asset, ..  } = to_merge;
+    assert!(unstaked.is_none() && staked.unstaked.is_none(), EAlreadyUnstaked);
+    id.delete();
+
+    let assets = match (asset) {
+        Adapter::Fungible(_coin) => abort ENotNonFungible,
+        Adapter::NonFungible(assets) => assets,
+    };
+
+    match (&mut staked.asset) {
+        Adapter::NonFungible(staked_assets) => {
+            staked.value = staked.value + value;
+            staked_assets.append(assets);
+        },
+        _ => abort ENotNonFungible,
+    }
+}
+
 /// Starts cooldown for the staked asset
 public fun unstake<Asset: store>(
     staked: &mut Staked<Asset>,

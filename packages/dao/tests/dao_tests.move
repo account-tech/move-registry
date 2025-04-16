@@ -228,6 +228,45 @@ fun test_stake_unstake_object() {
     end(scenario, extensions, account, clock);
 }
 
+#[test]
+fun test_merge_staked_coin() {
+    let (mut scenario, extensions, mut account, clock) = start();
+    
+    let mut staked1 = dao::new_staked_coin<SUI>(&mut account, scenario.ctx());    
+    staked1.stake_coin(coin::mint_for_testing<SUI>(10, scenario.ctx()));
+    assert!(staked1.value() == 10);
+    
+    let mut staked2 = dao::new_staked_coin<SUI>(&mut account, scenario.ctx());    
+    staked2.stake_coin(coin::mint_for_testing<SUI>(20, scenario.ctx()));
+    assert!(staked2.value() == 20);
+
+    staked1.merge_staked_coin(staked2);
+    assert!(staked1.value() == 30);
+
+    destroy(staked1);
+    end(scenario, extensions, account, clock);
+}
+
+#[test]
+fun test_merge_staked_object() {
+    let (mut scenario, extensions, mut account, clock) = start();
+    
+    let mut staked1 = dao::new_staked_object<Obj>(&mut account, scenario.ctx());
+    staked1.stake_object(Obj { id: object::new(scenario.ctx()) });
+    assert!(staked1.value() == 1);
+
+    let mut staked2 = dao::new_staked_object<Obj>(&mut account, scenario.ctx());
+    staked2.stake_object(Obj { id: object::new(scenario.ctx()) });
+    staked2.stake_object(Obj { id: object::new(scenario.ctx()) });
+    assert!(staked2.value() == 2);
+
+    staked1.merge_staked_object(staked2);
+    assert!(staked1.value() == 3);
+
+    destroy(staked1);
+    end(scenario, extensions, account, clock);
+}
+
 #[allow(implicit_const_copy)]
 #[test]
 fun test_vote_flow_with_coin() {
