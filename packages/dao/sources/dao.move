@@ -27,7 +27,6 @@ use std::{
 };
 use sui::{
     vec_set::{VecSet},
-    table::{Self, Table},
     clock::Clock,
     vec_map::{Self, VecMap},
     coin::{Self, Coin},
@@ -55,8 +54,9 @@ use fun account_interface::execute_intent as Account.execute_intent;
 
 const MUL: u64 = 1_000_000_000;
 // acts as a dynamic enum for the voting rule
-const LINEAR: u8 = 1;
-const QUADRATIC: u8 = 2;
+const VOTING_RULE: u8 = LINEAR | QUADRATIC;
+const LINEAR: u8 = 0;
+const QUADRATIC: u8 = 1;
 // answers for the vote
 const ANSWER: u8 = NO | YES | ABSTAIN;
 const NO: u8 = 0;
@@ -75,6 +75,9 @@ const EAlreadyUnstaked: u64 = 6;
 const ENotFungible: u64 = 7;
 const ENotNonFungible: u64 = 8;
 const EVoteNotEnded: u64 = 9;
+const EInvalidIntentKey: u64 = 10;
+const EMinimumVotesNotReached: u64 = 11;
+const ENotEnoughAuthPower: u64 = 12;
 
 // === Structs ===
 
@@ -101,6 +104,7 @@ public struct Dao has copy, drop, store {
 }
 
 /// Groups are multisig like, they have a threshold, members and roles corresponding to the intents they can approve
+#[allow(unused_field)] // implemented in the future
 public struct Group has copy, drop, store {
     // threshold for the group
     threshold: u64,
@@ -113,13 +117,11 @@ public struct Group has copy, drop, store {
 /// Outcome field for the Intents, voters are holders of the asset
 /// Intent is validated when group threshold is reached or dao rules are met
 /// Must be validated before destruction
-public struct Votes has store {
+public struct Votes has copy, drop, store {
     // voting start time 
     start_time: u64,
     // voting end time
     end_time: u64,
-    // who has approved the proposal => (answer, voting_power)
-    voted: Table<address, Voted>,
     // results of the votes, answer => total_voting_power
     results: VecMap<u8, u64>,
 }
@@ -136,7 +138,7 @@ public struct Vote<Asset: store> has key, store {
     // the intent voted on
     intent_key: String,
     // answer chosen for the vote
-    voted: Voted,
+    voted: Option<Voted>,
     // timestamp when the vote ends and when this object can be unpacked
     vote_end: u64,
     // staked assets with metadata
@@ -174,6 +176,8 @@ public fun new_account<AssetType>(
     minimum_votes: u64,
     ctx: &mut TxContext,
 ): Account<Dao> {
+    assert!(voting_rule & VOTING_RULE == voting_rule, EInvalidVotingRule);
+
     let config = Dao {
         groups: vector[],
         asset_type: type_name::get<AssetType>(),
@@ -199,16 +203,14 @@ public fun new_account<AssetType>(
 
 /// Authenticates the caller as a member (!= participant) of the DAO 
 public fun authenticate<Asset: store>(
-    staked: Staked<Asset>,
+    staked: &Staked<Asset>,
     account: &Account<Dao>,
     clock: &Clock,
 ): Auth {
-    let voting_power = staked.get_voting_power(account, clock);
-
     account.create_auth!(
         version::current(),
         ConfigWitness(),
-        || voting_power >= account.config().auth_voting_power
+        || account.config().assert_has_auth_power(staked, clock)
     )
 }
 
@@ -216,12 +218,10 @@ public fun authenticate<Asset: store>(
 public fun empty_votes_outcome(
     start_time: u64,
     end_time: u64,
-    ctx: &mut TxContext
 ): Votes {
     Votes {
         start_time,
         end_time,
-        voted: table::new(ctx),
         results: vec_map::from_keys_values(
             vector[NO, YES, ABSTAIN], 
             vector[0, 0, 0],
@@ -230,7 +230,7 @@ public fun empty_votes_outcome(
 }
 
 /// Stakes a coin and get its value
-public fun new_staked_coin<CoinType: store>(
+public fun new_staked_coin<CoinType>(
     account: &mut Account<Dao>,
     ctx: &mut TxContext
 ): Staked<Coin<CoinType>> {
@@ -244,20 +244,20 @@ public fun new_staked_coin<CoinType: store>(
 }
 
 /// Stakes the asset and adds 1 as value
-public fun new_staked_object<Asset: key + store>(
+public fun new_staked_object<Asset: store>(
     account: &mut Account<Dao>,
     ctx: &mut TxContext
 ): Staked<Asset> {
     Staked {
         id: object::new(ctx),
         dao_addr: account.addr(),
-        value: 1,
+        value: 0,
         unstaked: option::none(),
         asset: Adapter::NonFungible(vector[]),
     }
 }
 
-public fun stake_coin<CoinType: store>(
+public fun stake_coin<CoinType>(
     staked: &mut Staked<Coin<CoinType>>,
     coin: Coin<CoinType>,
 ) {
@@ -304,7 +304,7 @@ public fun claim<Asset: key + store>(
     
     assert!(dao_addr == account.addr(), EInvalidAccount);
     assert!(unstaked.is_some(), ENotUnstaked);
-    assert!(clock.timestamp_ms() > account.config().unstaking_cooldown + unstaked.extract(), ENotUnstaked);
+    assert!(clock.timestamp_ms() >= account.config().unstaking_cooldown + unstaked.extract(), ENotUnstaked);
 
     match (asset) {
         Adapter::Fungible(coin) => {
@@ -321,18 +321,16 @@ public fun claim<Asset: key + store>(
 public fun new_vote<Asset: store>(
     account: &mut Account<Dao>,
     intent_key: String,
-    answer: u8,
     staked: Staked<Asset>,
-    clock: &Clock,
     ctx: &mut TxContext
 ): Vote<Asset> {
-    assert!(answer == ANSWER, EInvalidAnswer);
+    assert!(account.intents().contains(intent_key), EInvalidIntentKey);
 
     Vote {
         id: object::new(ctx),
         dao_addr: account.addr(),
         intent_key,
-        voted: Voted(answer, staked.get_voting_power(account, clock)),
+        voted: option::none(),
         vote_end: account.intents().get<Votes>(intent_key).outcome().end_time,
         staked,
     }
@@ -342,42 +340,43 @@ public fun new_vote<Asset: store>(
 public fun vote<Asset: store>(
     vote: &mut Vote<Asset>,
     account: &mut Account<Dao>,
-    key: String,
     answer: u8,
     clock: &Clock,
 ) {
-    assert!(answer == ANSWER, EInvalidAnswer);
+    let intent_key = vote.intent_key;
+    assert!(answer & ANSWER == answer, EInvalidAnswer);
     assert!(
-        clock.timestamp_ms() > account.intents().get<Votes>(key).outcome().start_time &&
-        clock.timestamp_ms() < account.intents().get<Votes>(key).outcome().end_time, 
+        clock.timestamp_ms() >= account.intents().get<Votes>(intent_key).outcome().start_time &&
+        clock.timestamp_ms() <= account.intents().get<Votes>(intent_key).outcome().end_time, 
         EProposalNotActive
     );
 
-    vote.voted.0 = answer;
+    let power = vote.staked.get_voting_power(account.config(), clock);
 
     account.resolve_intent!<_, Votes, _>(
-        key, 
+        intent_key, 
         version::current(), 
         ConfigWitness(),
         |outcome| {
-            if (outcome.voted.contains(vote.addr())) {
-                let Voted(prev_answer, prev_power) = outcome.voted.remove(vote.addr());
+            if (vote.voted.is_some()) {
+                let Voted(prev_answer, prev_power) = vote.voted.extract();
                 *outcome.results.get_mut(&prev_answer) = *outcome.results.get_mut(&prev_answer) - prev_power;
             };
 
-            outcome.voted.add(vote.addr(), Voted(answer, vote.voted.1)); // throws if already approved
-            *outcome.results.get_mut(&answer) = *outcome.results.get_mut(&answer) + vote.voted.1;
+            *outcome.results.get_mut(&answer) = *outcome.results.get_mut(&answer) + power;
+            vote.voted.fill(Voted(answer, power));
         }
     );
 }
 
+public use fun destroy_vote as Vote.destroy;
 public fun destroy_vote<Asset: store>(
     vote: Vote<Asset>,
     clock: &Clock,
 ): Staked<Asset> {
     let Vote { id, vote_end, staked, .. } = vote;
 
-    assert!(clock.timestamp_ms() > vote_end, EVoteNotEnded);
+    assert!(clock.timestamp_ms() >= vote_end, EVoteNotEnded);
     id.delete();
 
     staked
@@ -388,7 +387,13 @@ public fun execute_votes_intent(
     key: String, 
     clock: &Clock,
 ): Executable<Votes> {
-    account.execute_intent!<_, Votes, _>(key, clock, version::current(), ConfigWitness())
+    account.execute_intent!<_, Votes, _>(
+        key, 
+        clock, 
+        version::current(), 
+        ConfigWitness(),
+        |outcome| outcome.validate_outcome(account.config(), clock)
+    )
 }
 
 public use fun validate_votes_outcome as Votes.validate_outcome;
@@ -396,16 +401,16 @@ public use fun validate_votes_outcome as Votes.validate_outcome;
 public fun validate_votes_outcome(
     outcome: Votes, 
     dao: &Dao, 
-    _role: String, // useless but to respect the interface
+    clock: &Clock,
 ) {
-    let Votes { voted, results, .. } = outcome;
-    voted.drop();
+    let Votes { results, end_time, .. } = outcome;
 
     let total_votes = results[&YES] + results[&NO] + results[&ABSTAIN];
 
+    assert!(end_time > clock.timestamp_ms(), EVoteNotEnded);
+    assert!(total_votes >= dao.minimum_votes, EMinimumVotesNotReached);
     assert!(
-        total_votes >= dao.minimum_votes && 
-        math::mul_div_down(results[&YES], MUL, total_votes) >= dao.voting_quorum * MUL, 
+        math::mul_div_down(results[&YES], MUL, total_votes) >= dao.voting_quorum, 
         EThresholdNotReached
     );
 }
@@ -422,12 +427,47 @@ public fun leave(user: &mut User, account: &Account<Dao>) {
 
 // === Accessors ===
 
+public fun assert_has_auth_power<Asset: store>(
+    dao: &Dao,
+    staked: &Staked<Asset>,
+    clock: &Clock,
+) {
+    assert!(
+        staked.get_voting_power(dao, clock) >= dao.auth_voting_power,
+        ENotEnoughAuthPower
+    );
+}
+
 public fun addr<Asset: store>(vote: &Vote<Asset>): address {
     object::id(vote).to_address()
 }
 
 public fun asset_type(dao: &Dao): TypeName {
     dao.asset_type
+}
+
+public fun auth_voting_power(dao: &Dao): u64 {
+    dao.auth_voting_power
+}
+
+public fun unstaking_cooldown(dao: &Dao): u64 {
+    dao.unstaking_cooldown
+}
+
+public fun voting_rule(dao: &Dao): u8 {
+    dao.voting_rule
+}
+
+public fun max_voting_power(dao: &Dao): u64 {
+    dao.max_voting_power
+}
+
+public fun voting_quorum(dao: &Dao): u64 {
+    dao.voting_quorum
+}
+
+public fun minimum_votes(dao: &Dao): u64 {
+    dao.minimum_votes
 }
 
 public fun is_coin(dao: &Dao): bool {
@@ -446,6 +486,7 @@ public fun is_coin(dao: &Dao): bool {
 }
 
 // outcome functions
+
 public fun start_time(outcome: &Votes): u64 {
     outcome.start_time
 }
@@ -454,13 +495,55 @@ public fun end_time(outcome: &Votes): u64 {
     outcome.end_time
 }
 
-public fun voted(outcome: &Votes, vote: address): (u8, u64) {
-    let voted = outcome.voted.borrow(vote);
-    (voted.0, voted.1)
-}
-
 public fun results(outcome: &Votes): &VecMap<u8, u64> {
     &outcome.results
+}
+
+// staked functions
+
+public use fun staked_dao_addr as Staked.dao_addr;
+public fun staked_dao_addr<Asset: store>(staked: &Staked<Asset>): address {
+    staked.dao_addr
+}
+
+public fun value<Asset: store>(staked: &Staked<Asset>): u64 {
+    staked.value
+}
+
+public fun unstaked<Asset: store>(staked: &Staked<Asset>): Option<u64> {
+    staked.unstaked
+}
+
+public fun asset<Asset: store>(staked: &Staked<Asset>): &Adapter<Asset> {
+    &staked.asset
+}
+
+// vote functions
+
+public use fun vote_dao_addr as Vote.dao_addr;
+public fun vote_dao_addr<Asset: store>(vote: &Vote<Asset>): address {
+    vote.dao_addr
+}
+
+public fun intent_key<Asset: store>(vote: &Vote<Asset>): String {
+    vote.intent_key
+}
+
+public fun voted<Asset: store>(vote: &Vote<Asset>): Option<Voted> {
+    vote.voted
+}
+
+public fun vote_end<Asset: store>(vote: &Vote<Asset>): u64 {
+    vote.vote_end
+}
+
+public fun staked<Asset: store>(vote: &Vote<Asset>): &Staked<Asset> {
+    &vote.staked
+}
+
+public use fun voted_values as Voted.values;
+public fun voted_values(voted: Voted): (u8, u64) {
+    (voted.0, voted.1)
 }
 
 // === Package functions ===
@@ -495,14 +578,12 @@ public(package) fun config_mut(account: &mut Account<Dao>): &mut Dao {
 /// Returns the voting multiplier depending on the cooldown [0, 1e9]
 fun get_voting_power<Asset: store>(
     staked: &Staked<Asset>,
-    account: &Account<Dao>,
+    dao: &Dao,
     clock: &Clock,
 ): u64 {
-    assert!(staked.dao_addr == account.addr(), EInvalidAccount);
-
-    let cooldown = account.config().unstaking_cooldown;
+    let cooldown = dao.unstaking_cooldown;
     // find coef according to the cooldown
-    let mut coef = if (staked.unstaked.is_none()) {
+    let coef = if (staked.unstaked.is_none()) {
         MUL
     } else {
         let time_passed = clock.timestamp_ms() - *staked.unstaked.borrow();
@@ -511,14 +592,14 @@ fun get_voting_power<Asset: store>(
     };
 
     // apply the voting rule to get the voting power
-    let voting_power = if (account.config().voting_rule == LINEAR) {
+    let voting_power = if (dao.voting_rule == LINEAR) {
         coef * staked.value / MUL
-    } else if (account.config().voting_rule == QUADRATIC) {
+    } else if (dao.voting_rule == QUADRATIC) {
         math::sqrt_down(coef * staked.value) / MUL
     } else {
         abort EInvalidVotingRule
     }; // can add other voting rules in the future
 
     // cap the voting power
-    math::min(voting_power, account.config().max_voting_power)
+    math::min(voting_power, dao.max_voting_power)
 }
