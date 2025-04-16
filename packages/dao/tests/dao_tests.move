@@ -66,7 +66,7 @@ fun start(): (Scenario, Extensions, Account<Dao>, Clock) {
     extensions.add(&cap, b"AccountDao".to_string(), @account_dao, 1);
     extensions.add(&cap, b"AccountActions".to_string(), @0xAC, 1);
 
-    let account = dao::new_account<Obj>(&extensions, 1,0,LINEAR,10,3,5,scenario.ctx());
+    let account = dao::new_account<Coin<SUI>>(&extensions, 1,0,LINEAR,10,3,5,scenario.ctx());
     let clock = clock::create_for_testing(scenario.ctx());
 
     destroy(cap);
@@ -93,7 +93,7 @@ fun create_and_add_dummy_intent(
         clock,
         scenario.ctx(),
     );
-    let outcome = dao::empty_votes_outcome(0, 1);
+    let outcome = dao::empty_votes_outcome(1, 2, clock);
     intent_interface::build_intent!<Dao, _, _>(
         account,
         params,
@@ -111,7 +111,7 @@ fun create_and_add_other_intent(
     account: &mut Account<Dao>,
     clock: &Clock,
 ) {
-    let outcome = dao::empty_votes_outcome(0, 1);
+    let outcome = dao::empty_votes_outcome(1, 2, clock);
     let params = intents::new_params(
         b"other".to_string(), 
         b"description".to_string(), 
@@ -139,7 +139,7 @@ fun test_dao_getters() {
     let (scenario, extensions, account, clock) = start();
     let dao = account.config();
     
-    assert!(dao.asset_type() == type_name::get<Obj>());
+    assert!(dao.asset_type() == type_name::get<Coin<SUI>>());
     assert!(dao.auth_voting_power() == 1);
     assert!(dao.unstaking_cooldown() == 0);
     assert!(dao.voting_rule() == LINEAR);
@@ -237,6 +237,7 @@ fun test_vote_flow_with_coin() {
     let mut bob_staked = dao::new_staked_coin<SUI>(&mut account, scenario.ctx());
     bob_staked.stake_coin(coin::mint_for_testing<SUI>(10, scenario.ctx()));
     
+    clock.increment_for_testing(1);
     let mut bob_vote = dao::new_vote<Coin<SUI>>(
         &mut account, 
         b"dummy".to_string(), 
@@ -248,7 +249,7 @@ fun test_vote_flow_with_coin() {
     assert!(bob_vote.intent_key() == b"dummy".to_string());
     let voted = bob_vote.voted();
     assert!(voted.is_none());
-    assert!(bob_vote.vote_end() == 1);
+    assert!(bob_vote.vote_end() == 2);
 
     bob_vote.vote(&mut account, YES, &clock); 
     let (answer, power) = bob_vote.voted().extract().values();
@@ -288,12 +289,14 @@ fun test_vote_flow_with_coin() {
 #[test]
 fun test_vote_flow_with_object() {
     let (mut scenario, extensions, mut account, mut clock) = start();
+    dao::set_asset_type_for_testing<Obj>(&mut account);
     create_and_add_dummy_intent(&mut scenario, &mut account, &clock);
 
     let mut bob_staked = dao::new_staked_object<Obj>(&mut account, scenario.ctx());
     bob_staked.stake_object(Obj { id: object::new(scenario.ctx()) });
     bob_staked.stake_object(Obj { id: object::new(scenario.ctx()) });
     
+    clock.increment_for_testing(1);
     let mut bob_vote = dao::new_vote<Obj>(
         &mut account, 
         b"dummy".to_string(), 
@@ -305,7 +308,7 @@ fun test_vote_flow_with_object() {
     assert!(bob_vote.intent_key() == b"dummy".to_string());
     let voted = bob_vote.voted();
     assert!(voted.is_none());
-    assert!(bob_vote.vote_end() == 1);
+    assert!(bob_vote.vote_end() == 2);
 
     bob_vote.vote(&mut account, YES, &clock);
     let (answer, power) = bob_vote.voted().extract().values();
@@ -366,6 +369,7 @@ fun test_intent_execution() {
     let mut staked = dao::new_staked_coin<SUI>(&mut account, scenario.ctx());
     staked.stake_coin(coin::mint_for_testing<SUI>(10, scenario.ctx()));
     
+    clock.increment_for_testing(1);
     let mut bob_vote = dao::new_vote<Coin<SUI>>(
         &mut account, 
         b"dummy".to_string(), 

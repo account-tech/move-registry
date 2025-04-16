@@ -41,6 +41,7 @@ public fun request_config_dao<AssetType>(
     params: Params,
     outcome: Votes,
     // dao rules
+    auth_voting_power: u64,
     unstaking_cooldown: u64,
     voting_rule: u8,
     max_voting_power: u64,
@@ -51,7 +52,12 @@ public fun request_config_dao<AssetType>(
     account.verify(auth);
 
     let config = dao::new_config<AssetType>(
-        unstaking_cooldown, voting_rule, max_voting_power, minimum_votes, voting_quorum
+        auth_voting_power, 
+        unstaking_cooldown, 
+        voting_rule, 
+        max_voting_power, 
+        minimum_votes, 
+        voting_quorum
     );    
     
     account.build_intent!(

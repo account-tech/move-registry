@@ -78,6 +78,9 @@ const EVoteNotEnded: u64 = 9;
 const EInvalidIntentKey: u64 = 10;
 const EMinimumVotesNotReached: u64 = 11;
 const ENotEnoughAuthPower: u64 = 12;
+const EEndBeforeStart: u64 = 13;
+const EStartInPast: u64 = 14;
+const EInvalidAssetType: u64 = 15;
 
 // === Structs ===
 
@@ -218,7 +221,11 @@ public fun authenticate<Asset: store>(
 public fun empty_votes_outcome(
     start_time: u64,
     end_time: u64,
+    clock: &Clock,
 ): Votes {
+    assert!(start_time < end_time, EEndBeforeStart);
+    assert!(start_time > clock.timestamp_ms(), EStartInPast);
+
     Votes {
         start_time,
         end_time,
@@ -325,6 +332,7 @@ public fun new_vote<Asset: store>(
     ctx: &mut TxContext
 ): Vote<Asset> {
     assert!(account.intents().contains(intent_key), EInvalidIntentKey);
+    assert!(account.config().asset_type == type_name::get<Asset>(), EInvalidAssetType);
 
     Vote {
         id: object::new(ctx),
@@ -550,6 +558,7 @@ public fun voted_values(voted: Voted): (u8, u64) {
 
 /// Creates a new DAO configuration.
 public(package) fun new_config<AssetType>(
+    auth_voting_power: u64,
     unstaking_cooldown: u64,
     voting_rule: u8,
     max_voting_power: u64,
@@ -558,7 +567,7 @@ public(package) fun new_config<AssetType>(
 ): Dao {
     Dao { 
         asset_type: type_name::get<AssetType>(),
-        auth_voting_power: 0,
+        auth_voting_power,
         groups: vector[],
         unstaking_cooldown, 
         voting_rule, 
@@ -602,4 +611,11 @@ fun get_voting_power<Asset: store>(
 
     // cap the voting power
     math::min(voting_power, dao.max_voting_power)
+}
+
+// === Tests ===
+
+#[test_only]
+public fun set_asset_type_for_testing<Asset>(account: &mut Account<Dao>) {
+    account.config_mut(version::current(), ConfigWitness()).asset_type = type_name::get<Asset>();
 }
