@@ -1,0 +1,21 @@
+[package]
+name = "AccountDao"
+edition = "2024.beta"
+license = "Apache-2.0"
+authors = [ "Thouny (thouny@tuta.io)" ]
+
+[dependencies.AccountProtocol]
+local = "../../../move-framework/packages/protocol"
+
+[dependencies.AccountExtensions]
+local = "../../../move-framework/packages/extensions"
+
+[dependencies.Sui]
+git = "https://github.com/MystenLabs/sui.git"
+subdir = "crates/sui-framework/packages/sui-framework"
+rev = "testnet"
+
+[addresses]
+account_dao = "0x0"
+account_protocol = "0x3e3387bfcd0feeca97d7b7d8bfa3056e901e7e77702e46fd3427fa071c2834bf"
+account_extensions = "0xe12b413d040fad46e6510a1ade973f23e2933a03631029120193b870fec7aae0"
