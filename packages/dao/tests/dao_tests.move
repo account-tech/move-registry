@@ -196,7 +196,7 @@ fun test_stake_unstake_coin() {
 
     staked.unstake(&clock);
     assert!(staked.unstaked() == option::some(0));
-    staked.claim(&mut account, &clock, scenario.ctx());
+    staked.claim_and_keep(&mut account, &clock, scenario.ctx());
 
     scenario.next_tx(BOB);
     let coin = scenario.take_from_sender<Coin<SUI>>();
@@ -222,7 +222,7 @@ fun test_stake_unstake_object() {
 
     staked.unstake(&clock);
     assert!(staked.unstaked() == option::some(0));
-    staked.claim(&mut account, &clock, scenario.ctx());
+    staked.claim_and_keep(&mut account, &clock, scenario.ctx());
 
     scenario.next_tx(BOB);
     let obj = scenario.take_from_sender<Obj>();
@@ -232,7 +232,7 @@ fun test_stake_unstake_object() {
 }
 
 #[test]
-fun test_merge_staked_coin() {
+fun test_merge_split_staked_coin() {
     let (mut scenario, extensions, registry, mut account, clock) = start();
     
     let mut staked1 = dao::new_staked_coin<SUI>(&mut account, scenario.ctx());    
@@ -246,12 +246,17 @@ fun test_merge_staked_coin() {
     staked1.merge_staked_coin(staked2);
     assert!(staked1.value() == 30);
 
+    let staked3 = staked1.split_staked_coin(5, scenario.ctx());
+    assert!(staked3.value() == 5);
+    assert!(staked1.value() == 25);
+ 
     destroy(staked1);
+    destroy(staked3);
     end(scenario, extensions, registry, account, clock);
 }
 
 #[test]
-fun test_merge_staked_object() {
+fun test_merge_split_staked_object() {
     let (mut scenario, extensions, registry, mut account, clock) = start();
     
     let mut staked1 = dao::new_staked_object<Obj>(&mut account, scenario.ctx());
@@ -266,7 +271,12 @@ fun test_merge_staked_object() {
     staked1.merge_staked_object(staked2);
     assert!(staked1.value() == 3);
 
+    let staked3 = staked1.split_staked_object(1, scenario.ctx());
+    assert!(staked3.value() == 1);
+    assert!(staked1.value() == 2);
+
     destroy(staked1);
+    destroy(staked3);
     end(scenario, extensions, registry, account, clock);
 }
 

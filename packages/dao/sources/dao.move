@@ -168,8 +168,10 @@ public struct Staked<Asset: store> has key, store {
 }
 
 public enum Adapter<Asset: store> has store {
-    Fungible(Asset), // Asset is Coin<CoinType>
-    NonFungible(vector<Asset>), // Asset is object type
+    // Asset is Coin<CoinType>
+    Fungible(Asset),
+    // Asset is object type
+    NonFungible(vector<Asset>),
 }
 
 // === [ACCOUNT] Public functions ===
@@ -288,26 +290,16 @@ public fun stake_coin<CoinType>(
     staked: &mut Staked<Coin<CoinType>>,
     coin: Coin<CoinType>,
 ) {
-    match (&mut staked.asset) {
-        Adapter::Fungible(staked_coin) => {
-            staked.value = staked.value + coin.value();
-            staked_coin.join(coin);
-        },
-        _ => abort ENotFungible,
-    }
+    staked.value = staked.value + coin.value();
+    staked.asset.fungible_mut().join(coin);
 }
 
 public fun stake_object<Asset: key + store>(
     staked: &mut Staked<Asset>,
     asset: Asset,
 ) {
-    match (&mut staked.asset) {
-        Adapter::NonFungible(assets) => {
-            staked.value = staked.value + 1;
-            assets.push_back(asset);
-        },
-        _ => abort ENotNonFungible,
-    }
+    staked.value = staked.value + 1;
+    staked.asset.non_fungible_mut().push_back(asset);
 }
 
 public fun merge_staked_coin<CoinType>(
@@ -318,18 +310,8 @@ public fun merge_staked_coin<CoinType>(
     assert!(unstaked.is_none() && staked.unstaked.is_none(), EAlreadyUnstaked);
     id.delete();
 
-    let coin = match (asset) {
-        Adapter::Fungible(coin) => coin,
-        Adapter::NonFungible(_notcoin) => abort ENotFungible,
-    };
-
-    match (&mut staked.asset) {
-        Adapter::Fungible(staked_coin) => {
-            staked.value = staked.value + value;
-            staked_coin.join(coin);
-        },
-        _ => abort ENotFungible,
-    };
+    staked.value = staked.value + value;
+    staked.asset.fungible_mut().join(asset.extract_fungible());
 }
 
 public fun merge_staked_object<Asset: key + store>(
@@ -340,17 +322,48 @@ public fun merge_staked_object<Asset: key + store>(
     assert!(unstaked.is_none() && staked.unstaked.is_none(), EAlreadyUnstaked);
     id.delete();
 
-    let assets = match (asset) {
-        Adapter::Fungible(_coin) => abort ENotNonFungible,
-        Adapter::NonFungible(assets) => assets,
-    };
+    staked.value = staked.value + value;
+    staked.asset.non_fungible_mut().append(asset.extract_non_fungible());
+}
 
-    match (&mut staked.asset) {
-        Adapter::NonFungible(staked_assets) => {
-            staked.value = staked.value + value;
-            staked_assets.append(assets);
-        },
-        _ => abort ENotNonFungible,
+public fun split_staked_coin<CoinType>(
+    staked: &mut Staked<Coin<CoinType>>,
+    to_split: u64,
+    ctx: &mut TxContext,
+): Staked<Coin<CoinType>> {
+    assert!(staked.unstaked.is_none(), EAlreadyUnstaked);
+
+    staked.value = staked.value - to_split;
+    let coin = staked.asset.fungible_mut().split(to_split, ctx);
+    
+    Staked {
+        id: object::new(ctx),
+        dao_addr: staked.dao_addr,
+        value: to_split,
+        unstaked: option::none(),
+        asset: Adapter::Fungible(coin),
+    }
+}
+
+public fun split_staked_object<Asset: key + store>(
+    staked: &mut Staked<Asset>,
+    to_split: u64,
+    ctx: &mut TxContext,
+): Staked<Asset> {
+    assert!(staked.unstaked.is_none(), EAlreadyUnstaked);
+
+    staked.value = staked.value - to_split;
+
+    let mut to_stake = vector[];
+    let objs = staked.asset.non_fungible_mut();
+    to_split.do!(|_| to_stake.push_back(objs.pop_back()));
+
+    Staked {
+        id: object::new(ctx),
+        dao_addr: staked.dao_addr,
+        value: to_split,
+        unstaked: option::none(),
+        asset: Adapter::NonFungible(to_stake),
     }
 }
 
@@ -363,8 +376,40 @@ public fun unstake<Asset: store>(
     staked.unstaked = option::some(clock.timestamp_ms());    
 }
 
+/// Retrieves the coin after cooldown
+public fun claim_coin<CoinType>(
+    staked: Staked<Coin<CoinType>>,
+    account: &mut Account<Dao>,
+    clock: &Clock,
+): Coin<CoinType> {
+    let Staked { id, dao_addr, mut unstaked, asset, .. } = staked;
+    id.delete();
+    
+    assert!(dao_addr == account.addr(), EInvalidAccount);
+    assert!(unstaked.is_some(), ENotUnstaked);
+    assert!(clock.timestamp_ms() >= account.config().unstaking_cooldown + unstaked.extract(), ENotUnstaked);
+
+    asset.extract_fungible()
+}
+
+/// Retrieves the objects after cooldown
+public fun claim_objects<Asset: key + store>(
+    staked: Staked<Asset>,
+    account: &mut Account<Dao>,
+    clock: &Clock,
+): vector<Asset> {
+    let Staked { id, dao_addr, mut unstaked, asset, .. } = staked;
+    id.delete();
+    
+    assert!(dao_addr == account.addr(), EInvalidAccount);
+    assert!(unstaked.is_some(), ENotUnstaked);
+    assert!(clock.timestamp_ms() >= account.config().unstaking_cooldown + unstaked.extract(), ENotUnstaked);
+
+    asset.extract_non_fungible()
+}
+
 /// Retrieves the staked asset after cooldown
-public fun claim<Asset: key + store>(
+public fun claim_and_keep<Asset: key + store>(
     staked: Staked<Asset>,
     account: &mut Account<Dao>,
     clock: &Clock,
@@ -646,6 +691,34 @@ public(package) fun config_mut(account: &mut Account<Dao>): &mut Dao {
 }
 
 // === Private functions ===
+
+fun fungible_mut<CoinType>(asset: &mut Adapter<Coin<CoinType>>): &mut Coin<CoinType> {
+    match (asset) {
+        Adapter::Fungible(coin) => coin,
+        Adapter::NonFungible(_notcoin) => abort ENotFungible,
+    }
+}
+
+fun non_fungible_mut<Obj: store>(asset: &mut Adapter<Obj>): &mut vector<Obj> {
+    match (asset) {
+        Adapter::Fungible(_coin) => abort ENotNonFungible,
+        Adapter::NonFungible(assets) => assets,
+    }
+}
+
+fun extract_fungible<CoinType>(asset: Adapter<Coin<CoinType>>): Coin<CoinType> {
+    match (asset) {
+        Adapter::Fungible(coin) => coin,
+        Adapter::NonFungible(_notcoin) => abort ENotFungible,
+    }
+}
+
+fun extract_non_fungible<Obj: store>(asset: Adapter<Obj>): vector<Obj> {
+    match (asset) {
+        Adapter::Fungible(_coin) => abort ENotNonFungible,
+        Adapter::NonFungible(assets) => assets,
+    }
+}
 
 /// Returns the voting multiplier depending on the cooldown [0, 1e9]
 fun get_voting_power<Asset: store>(
