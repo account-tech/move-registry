@@ -465,11 +465,11 @@ public fun execute_votes_intent(
         clock, 
         version::current(), 
         ConfigWitness(),
-        |outcome| outcome.validate_outcome(account.config(), clock)
+        |outcome| outcome.validate(account.config(), clock)
     )
 }
 
-public use fun validate_votes_outcome as Votes.validate_outcome;
+public use fun validate_votes_outcome as Votes.validate;
 #[allow(implicit_const_copy)]
 public fun validate_votes_outcome(
     outcome: Votes, 

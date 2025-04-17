@@ -214,11 +214,11 @@ public fun execute_intent(
         clock, 
         version::current(), 
         ConfigWitness(),
-        |outcome| outcome.validate_outcome(account.config(), role)
+        |outcome| outcome.validate(account.config(), role)
     )
 }
 
-// Used implicitly by execute_intent!
+public use fun validate_outcome as Approvals.validate;
 public fun validate_outcome(
     outcome: Approvals, 
     multisig: &Multisig,

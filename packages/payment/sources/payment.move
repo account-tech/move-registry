@@ -146,10 +146,19 @@ public fun execute_intent(
     key: String, 
     clock: &Clock,
 ): Executable<Pending> {
-    account.execute_intent!<_, Pending, _>(key, clock, version::current(), ConfigWitness())
+    account.execute_intent!<_, Pending, _>(
+        key, 
+        clock, 
+        version::current(), 
+        ConfigWitness(),
+        |outcome| {
+            outcome.validate_outcome()
+        }
+    )
 }
 
-public fun validate_outcome(outcome: Pending, _config: &Payment, _role: String) {
+public use fun validate_outcome as Pending.validate;
+public fun validate_outcome(outcome: Pending) {
     let Pending { approved_by } = outcome;
     assert!(approved_by.is_some(), ENotApproved);
 }
