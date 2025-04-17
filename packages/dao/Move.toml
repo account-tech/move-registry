@@ -16,6 +16,6 @@ subdir = "crates/sui-framework/packages/sui-framework"
 rev = "testnet"
 
 [addresses]
-account_dao = "0x0"
-account_protocol = "0x3e3387bfcd0feeca97d7b7d8bfa3056e901e7e77702e46fd3427fa071c2834bf"
-account_extensions = "0xe12b413d040fad46e6510a1ade973f23e2933a03631029120193b870fec7aae0"
+account_dao = "0x07a6534dc2fe134c4e7dfe5b1e5b9d954ac829bd8556d92e04d4be2c9d6fac99"
+account_protocol = "0x27f3d8af66a6253c07b3c2576a429bc96c89adee14f49318a9ce21a842fd8552"
+account_extensions = "0xbcd8105d33da551047e81e523f6bc2646f5bb7ba2ba31cf5f06e9073ef0600ce"
