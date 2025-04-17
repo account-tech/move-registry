@@ -284,19 +284,18 @@ fun test_vote_flow_with_coin() {
         &mut account, 
         b"dummy".to_string(), 
         bob_staked, 
+        &clock,
         scenario.ctx()
     );
 
     assert!(bob_vote.dao_addr() == account.addr());
     assert!(bob_vote.intent_key() == b"dummy".to_string());
-    let voted = bob_vote.voted();
-    assert!(voted.is_none());
+    assert!(bob_vote.answer().is_none());
+    assert!(bob_vote.power() == 10);
     assert!(bob_vote.vote_end() == 2);
 
     bob_vote.vote(&mut account, YES, &clock); 
-    let (answer, power) = bob_vote.voted().extract().values();
-    assert!(answer == YES);
-    assert!(power == 10);
+    assert!(bob_vote.answer() == option::some(YES));
     let votes = account.intents().get<Votes>(b"dummy".to_string()).outcome();    
     assert!(votes.results().get(&YES) == 10);
     assert!(votes.results().get(&NO) == 0);
@@ -311,6 +310,7 @@ fun test_vote_flow_with_coin() {
         &mut account, 
         b"dummy".to_string(), 
         alice_staked, 
+        &clock,
         scenario.ctx()
     );
 
@@ -343,19 +343,18 @@ fun test_vote_flow_with_object() {
         &mut account, 
         b"dummy".to_string(), 
         bob_staked, 
+        &clock,
         scenario.ctx()
     );
 
     assert!(bob_vote.dao_addr() == account.addr());
     assert!(bob_vote.intent_key() == b"dummy".to_string());
-    let voted = bob_vote.voted();
-    assert!(voted.is_none());
+    assert!(bob_vote.answer().is_none());
+    assert!(bob_vote.power() == 2);
     assert!(bob_vote.vote_end() == 2);
 
     bob_vote.vote(&mut account, YES, &clock);
-    let (answer, power) = bob_vote.voted().extract().values();
-    assert!(answer == YES);
-    assert!(power == 2);
+    assert!(bob_vote.answer() == option::some(YES));
 
     let votes = account.intents().get<Votes>(b"dummy".to_string()).outcome();    
     assert!(votes.results().get(&YES) == 2);
@@ -371,6 +370,7 @@ fun test_vote_flow_with_object() {
         &mut account, 
         b"dummy".to_string(), 
         alice_staked, 
+        &clock,
         scenario.ctx()
     );
 
@@ -416,6 +416,7 @@ fun test_intent_execution() {
         &mut account, 
         b"dummy".to_string(), 
         staked,
+        &clock,
         scenario.ctx()
     );
     bob_vote.vote(&mut account, YES, &clock);

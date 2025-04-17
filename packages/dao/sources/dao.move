@@ -136,9 +136,6 @@ public struct Votes has copy, drop, store {
     results: VecMap<u8, u64>,
 }
 
-/// Tuple struct for storing the answer and voting power of a voter
-public struct Voted(u8, u64) has copy, drop, store;
-
 /// Object wrapping the staked assets used for voting in a specific dao
 /// Staked assets cannot be retrieved during the voting period
 public struct Vote<Asset: store> has key, store {
@@ -147,8 +144,10 @@ public struct Vote<Asset: store> has key, store {
     dao_addr: address,
     // the intent voted on
     intent_key: String,
-    // answer chosen for the vote
-    voted: Option<Voted>,
+    // answer chosen for the vote if voted
+    answer: Option<u8>,
+    // voting power of the voter
+    power: u64,
     // timestamp when the vote ends and when this object can be unpacked
     vote_end: u64,
     // staked assets with metadata
@@ -394,6 +393,7 @@ public fun new_vote<Asset: store>(
     account: &mut Account<Dao>,
     intent_key: String,
     staked: Staked<Asset>,
+    clock: &Clock,
     ctx: &mut TxContext
 ): Vote<Asset> {
     assert!(account.intents().contains(intent_key), EInvalidIntentKey);
@@ -403,7 +403,8 @@ public fun new_vote<Asset: store>(
         id: object::new(ctx),
         dao_addr: account.addr(),
         intent_key,
-        voted: option::none(),
+        answer: option::none(),
+        power: staked.get_voting_power(account.config(), clock),
         vote_end: account.intents().get<Votes>(intent_key).outcome().end_time,
         staked,
     }
@@ -424,20 +425,18 @@ public fun vote<Asset: store>(
         EProposalNotActive
     );
 
-    let power = vote.staked.get_voting_power(account.config(), clock);
-
     account.resolve_intent!<_, Votes, _>(
         intent_key, 
         version::current(), 
         ConfigWitness(),
         |outcome| {
-            if (vote.voted.is_some()) {
-                let Voted(prev_answer, prev_power) = vote.voted.extract();
-                *outcome.results.get_mut(&prev_answer) = *outcome.results.get_mut(&prev_answer) - prev_power;
+            if (vote.answer.is_some()) {
+                let prev_answer = vote.answer.extract();
+                *outcome.results.get_mut(&prev_answer) = *outcome.results.get_mut(&prev_answer) - vote.power;
             };
 
-            *outcome.results.get_mut(&answer) = *outcome.results.get_mut(&answer) + power;
-            vote.voted.fill(Voted(answer, power));
+            *outcome.results.get_mut(&answer) = *outcome.results.get_mut(&answer) + vote.power;
+            vote.answer = option::some(answer);
         }
     );
 }
@@ -602,8 +601,12 @@ public fun intent_key<Asset: store>(vote: &Vote<Asset>): String {
     vote.intent_key
 }
 
-public fun voted<Asset: store>(vote: &Vote<Asset>): Option<Voted> {
-    vote.voted
+public fun answer<Asset: store>(vote: &Vote<Asset>): Option<u8> {
+    vote.answer
+}
+
+public fun power<Asset: store>(vote: &Vote<Asset>): u64 {
+    vote.power
 }
 
 public fun vote_end<Asset: store>(vote: &Vote<Asset>): u64 {
@@ -612,11 +615,6 @@ public fun vote_end<Asset: store>(vote: &Vote<Asset>): u64 {
 
 public fun staked<Asset: store>(vote: &Vote<Asset>): &Staked<Asset> {
     &vote.staked
-}
-
-public use fun voted_values as Voted.values;
-public fun voted_values(voted: Voted): (u8, u64) {
-    (voted.0, voted.1)
 }
 
 // === Package functions ===
