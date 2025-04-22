@@ -6,6 +6,7 @@ module account_payment::pay;
 
 // === Imports ===
 
+use std::string::String;
 use sui::{
     coin::Coin,
     event,
@@ -34,15 +35,24 @@ const EWrongAmount: u64 = 0;
 
 // === Events ===
 
+public struct IssueEvent<phantom CoinType> has copy, drop {
+    // payment id
+    payment_id: String,
+    // payment amount without tips
+    amount: u64, 
+    // creator of the intent and recipient of the tips
+    issued_by: address,
+}
+
 public struct PayEvent<phantom CoinType> has copy, drop {
     // payment id
-    payment_id: address,
+    payment_id: String,
     // time when the intent was executed (payment made)
     timestamp: u64,
     // payment amount without tips
     amount: u64, 
     // optional additional tip amount 
-    tips: u64,
+    tip: u64,
     // creator of the intent and recipient of the tips
     issued_by: address,
 }
@@ -54,8 +64,6 @@ public struct PayIntent() has copy, drop;
 
 /// Action wrapping a Payment struct into an action.
 public struct PayAction<phantom CoinType> has drop, store {
-    // random id to identify payment
-    payment_id: address,
     // amount to be paid
     amount: u64,
     // creator address
@@ -78,8 +86,13 @@ public fun request_pay<CoinType>(
 ) {
     account.verify(auth);
 
+    event::emit(IssueEvent<CoinType> {
+        payment_id: params.key(),
+        amount,
+        issued_by: ctx.sender(),
+    });
+
     let action = PayAction<CoinType> { 
-        payment_id: ctx.fresh_object_address(),
         amount, 
         issued_by: ctx.sender() 
     };
@@ -112,17 +125,17 @@ public fun execute_pay<CoinType>(
             let action = executable.next_action<_, PayAction<CoinType>, _>(iw);
             assert!(coin.value() >= action.amount, EWrongAmount);
 
-            let tips = coin.value() - action.amount;
-            transfer::public_transfer(coin.split(tips, ctx), action.issued_by); 
+            let tip = coin.value() - action.amount;
+            transfer::public_transfer(coin.split(tip, ctx), action.issued_by); 
             // fees are not taken on tips
             fees.collect(&mut coin, ctx);
             transfer::public_transfer(coin, account.addr());
             
             event::emit(PayEvent<CoinType> {
-                payment_id: action.payment_id,
+                payment_id: executable.intent().key(),
                 timestamp: clock.timestamp_ms(),
                 amount: action.amount,
-                tips,
+                tip,
                 issued_by: action.issued_by,
             });
         }

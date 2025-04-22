@@ -3,7 +3,10 @@ module account_payment::payment;
 
 // === Imports ===
 
-use std::string::String;
+use std::{
+    string::String,
+    type_name,
+};
 use sui::{
     vec_set::{Self, VecSet},
     vec_map::{Self, VecMap},
@@ -99,7 +102,13 @@ public fun approve_intent(
     ctx: &TxContext,
 ) {
     account.config().assert_is_member(ctx);
-    account.config().assert_has_role(account.intents().get<Pending>(key).role(), ctx);
+    // get the initial package id to get the intent type
+    let mut config_intent_type = type_name::get<ConfigWitness>().get_address().to_string();
+    config_intent_type.append_utf8(b"::config::ConfigPaymentIntent");
+    // config intent can be executed by any member
+    if (account.intents().get<Pending>(key).type_().into_string().to_string() != config_intent_type) {
+        account.config().assert_has_role(account.intents().get<Pending>(key).role(), ctx);
+    };
         
     account.resolve_intent!<_, Pending, _>(
         key, 
@@ -137,10 +146,19 @@ public fun execute_intent(
     key: String, 
     clock: &Clock,
 ): Executable<Pending> {
-    account.execute_intent!<_, Pending, _>(key, clock, version::current(), ConfigWitness())
+    account.execute_intent!<_, Pending, _>(
+        key, 
+        clock, 
+        version::current(), 
+        ConfigWitness(),
+        |outcome| {
+            outcome.validate_outcome()
+        }
+    )
 }
 
-public fun validate_outcome(outcome: Pending, _config: &Payment, _role: String) {
+public use fun validate_outcome as Pending.validate;
+public fun validate_outcome(outcome: Pending) {
     let Pending { approved_by } = outcome;
     assert!(approved_by.is_some(), ENotApproved);
 }

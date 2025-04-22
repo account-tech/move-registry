@@ -1,20 +1,21 @@
 [package]
 name = "AccountPayment"
 edition = "2024.beta"
-license = "MIT"
+license = "Apache-2.0"
 authors = [ "Thouny (thouny@tuta.io)" ]
 
 [dependencies.AccountProtocol]
-git = "https://github.com/account-tech/move-framework.git"
-subdir = "packages/protocol"
-rev = "main"
+local = "../../../move-framework/packages/protocol"
 
 [dependencies.AccountExtensions]
-git = "https://github.com/account-tech/move-framework.git"
-subdir = "packages/extensions"
-rev = "main"
+local = "../../../move-framework/packages/extensions"
+
+[dependencies.Sui]
+git = "https://github.com/MystenLabs/sui.git"
+subdir = "crates/sui-framework/packages/sui-framework"
+rev = "testnet"
 
 [addresses]
-account_payment = "0x9ccc8527361cfb3215f6044a148b9356de3c72d673278df3f4167ee84259e8c5"
-account_protocol = "0x77a39df37fab5b6d47c9976f114ef1ac21313edee5a446135c08fdbaf615b623"
-account_extensions = "0x6e4d4fd65ffc3e7b09969bcfc34d4ec0b5bd640279f0027849884af404e9bc09"
+account_payment = "0xda64705d13f669db03ff59f181477ba1bcee679bffddf73f402ae85f75094a9e"
+account_protocol = "0x27f3d8af66a6253c07b3c2576a429bc96c89adee14f49318a9ce21a842fd8552"
+account_extensions = "0xbcd8105d33da551047e81e523f6bc2646f5bb7ba2ba31cf5f06e9073ef0600ce"
