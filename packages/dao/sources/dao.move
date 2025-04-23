@@ -37,6 +37,7 @@ use account_protocol::{
     account::{Account, Auth},
     executable::Executable,
     deps,
+    config,
     user::User,
     account_interface,
 };
@@ -224,6 +225,23 @@ public fun new_account<AssetType>(
     );
 
     registry.daos.push_back(account.addr());
+
+    account
+}
+
+/// Takes the Account by value (only possible before sharing) to add metadata without requiring auth
+public fun add_metadata(
+    account: Account<Dao>,
+    keys: vector<String>,
+    values: vector<String>,
+): Account<Dao> {
+    let auth = account.create_auth!(
+        version::current(),
+        ConfigWitness(),
+        || true // cheating to bypass the need to stake
+    );
+
+    config::edit_metadata(auth, &mut account, keys, values);
 
     account
 }
