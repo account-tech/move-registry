@@ -16,6 +16,6 @@ subdir = "crates/sui-framework/packages/sui-framework"
 rev = "testnet"
 
 [addresses]
-account_payment = "0xda64705d13f669db03ff59f181477ba1bcee679bffddf73f402ae85f75094a9e"
-account_protocol = "0x27f3d8af66a6253c07b3c2576a429bc96c89adee14f49318a9ce21a842fd8552"
-account_extensions = "0xbcd8105d33da551047e81e523f6bc2646f5bb7ba2ba31cf5f06e9073ef0600ce"
+account_payment = "0x72565113a325f0d0998d54e194e4ec8a3f487b79b743c0a5f5f655c621fb7ec5"
+account_protocol = "0x58438e1f3ecdaee65fc2076647bf04ac173bc4bb1335ee64027a17cf9f0bf5a7"
+account_extensions = "0x60bdbac4243b28773ca6d354fe5da75372552838d3fe766577bb48560600f27f"

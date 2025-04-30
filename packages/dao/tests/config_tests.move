@@ -71,7 +71,7 @@ fun end(scenario: Scenario, extensions: Extensions, registry: Registry, account:
     destroy(registry);
     destroy(account);
     destroy(clock);
-    ts::end(scenario);
+    ts::end(scenario); 
 }
 
 // === Tests ===
@@ -109,7 +109,7 @@ fun test_config_dao() {
     );
 
     clock.increment_for_testing(1);
-    let mut vote = dao::new_vote(&mut account, b"config".to_string(), staked, scenario.ctx());
+    let mut vote = dao::new_vote(&mut account, b"config".to_string(), staked, &clock, scenario.ctx());
     vote.vote(&mut account, YES, &clock);
     
     let mut executable = dao::execute_votes_intent(&mut account, b"config".to_string(), &clock);

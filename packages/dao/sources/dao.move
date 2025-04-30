@@ -37,6 +37,7 @@ use account_protocol::{
     account::{Account, Auth},
     executable::Executable,
     deps,
+    config,
     user::User,
     account_interface,
 };
@@ -82,6 +83,8 @@ const ENotEnoughAuthPower: u64 = 12;
 const EEndBeforeStart: u64 = 13;
 const EStartInPast: u64 = 14;
 const EInvalidAssetType: u64 = 15;
+const EWrongId: u64 = 16;
+const ENotClaimable: u64 = 17;
 
 // === Structs ===
 
@@ -136,9 +139,6 @@ public struct Votes has copy, drop, store {
     results: VecMap<u8, u64>,
 }
 
-/// Tuple struct for storing the answer and voting power of a voter
-public struct Voted(u8, u64) has copy, drop, store;
-
 /// Object wrapping the staked assets used for voting in a specific dao
 /// Staked assets cannot be retrieved during the voting period
 public struct Vote<Asset: store> has key, store {
@@ -147,8 +147,10 @@ public struct Vote<Asset: store> has key, store {
     dao_addr: address,
     // the intent voted on
     intent_key: String,
-    // answer chosen for the vote
-    voted: Option<Voted>,
+    // answer chosen for the vote if voted
+    answer: Option<u8>,
+    // voting power of the voter
+    power: u64,
     // timestamp when the vote ends and when this object can be unpacked
     vote_end: u64,
     // staked assets with metadata
@@ -162,15 +164,17 @@ public struct Staked<Asset: store> has key, store {
     dao_addr: address,
     // value of the staked asset (Coin.value if Coin or 1 if Object)
     value: u64,
-    // unstaking time, if none then staked
+    // time when the asset can be claimed, if none then not being unstaked
     unstaked: Option<u64>,
     // staked asset
     asset: Adapter<Asset>,
 }
 
 public enum Adapter<Asset: store> has store {
-    Fungible(Asset), // Asset is Coin<CoinType>
-    NonFungible(vector<Asset>), // Asset is object type
+    // Asset is Coin<CoinType>
+    Fungible(Asset),
+    // Asset is object type
+    NonFungible(vector<Asset>),
 }
 
 // === [ACCOUNT] Public functions ===
@@ -221,6 +225,23 @@ public fun new_account<AssetType>(
     );
 
     registry.daos.push_back(account.addr());
+
+    account
+}
+
+/// Takes the Account by value (only possible before sharing) to add metadata without requiring auth
+public fun add_metadata(
+    mut account: Account<Dao>,
+    keys: vector<String>,
+    values: vector<String>,
+): Account<Dao> {
+    let auth = account.create_auth!(
+        version::current(),
+        ConfigWitness(),
+        || {} // cheating to bypass the need to stake
+    );
+
+    config::edit_metadata(auth, &mut account, keys, values);
 
     account
 }
@@ -289,26 +310,16 @@ public fun stake_coin<CoinType>(
     staked: &mut Staked<Coin<CoinType>>,
     coin: Coin<CoinType>,
 ) {
-    match (&mut staked.asset) {
-        Adapter::Fungible(staked_coin) => {
-            staked.value = staked.value + coin.value();
-            staked_coin.join(coin);
-        },
-        _ => abort ENotFungible,
-    }
+    staked.value = staked.value + coin.value();
+    staked.asset.fungible_mut().join(coin);
 }
 
 public fun stake_object<Asset: key + store>(
     staked: &mut Staked<Asset>,
     asset: Asset,
 ) {
-    match (&mut staked.asset) {
-        Adapter::NonFungible(assets) => {
-            staked.value = staked.value + 1;
-            assets.push_back(asset);
-        },
-        _ => abort ENotNonFungible,
-    }
+    staked.value = staked.value + 1;
+    staked.asset.non_fungible_mut().push_back(asset);
 }
 
 public fun merge_staked_coin<CoinType>(
@@ -319,18 +330,8 @@ public fun merge_staked_coin<CoinType>(
     assert!(unstaked.is_none() && staked.unstaked.is_none(), EAlreadyUnstaked);
     id.delete();
 
-    let coin = match (asset) {
-        Adapter::Fungible(coin) => coin,
-        Adapter::NonFungible(_notcoin) => abort ENotFungible,
-    };
-
-    match (&mut staked.asset) {
-        Adapter::Fungible(staked_coin) => {
-            staked.value = staked.value + value;
-            staked_coin.join(coin);
-        },
-        _ => abort ENotFungible,
-    };
+    staked.value = staked.value + value;
+    staked.asset.fungible_mut().join(asset.extract_fungible());
 }
 
 public fun merge_staked_object<Asset: key + store>(
@@ -341,42 +342,105 @@ public fun merge_staked_object<Asset: key + store>(
     assert!(unstaked.is_none() && staked.unstaked.is_none(), EAlreadyUnstaked);
     id.delete();
 
-    let assets = match (asset) {
-        Adapter::Fungible(_coin) => abort ENotNonFungible,
-        Adapter::NonFungible(assets) => assets,
-    };
+    staked.value = staked.value + value;
+    staked.asset.non_fungible_mut().append(asset.extract_non_fungible());
+}
 
-    match (&mut staked.asset) {
-        Adapter::NonFungible(staked_assets) => {
-            staked.value = staked.value + value;
-            staked_assets.append(assets);
-        },
-        _ => abort ENotNonFungible,
+public fun split_staked_coin<CoinType>(
+    staked: &mut Staked<Coin<CoinType>>,
+    to_split: u64,
+    ctx: &mut TxContext,
+): Staked<Coin<CoinType>> {
+    assert!(staked.unstaked.is_none(), EAlreadyUnstaked);
+
+    staked.value = staked.value - to_split;
+    let coin = staked.asset.fungible_mut().split(to_split, ctx);
+    
+    Staked {
+        id: object::new(ctx),
+        dao_addr: staked.dao_addr,
+        value: to_split,
+        unstaked: option::none(),
+        asset: Adapter::Fungible(coin),
+    }
+}
+
+public fun split_staked_object<Asset: key + store>(
+    staked: &mut Staked<Asset>,
+    to_split: vector<ID>,
+    ctx: &mut TxContext,
+): Staked<Asset> {
+    assert!(staked.unstaked.is_none(), EAlreadyUnstaked);
+
+    staked.value = staked.value - to_split.length();
+
+    let mut to_stake = vector[];
+    to_split.do!(|id| {
+        let idx = staked.asset.non_fungible_mut().find_index!(|asset| object::id(asset) == id);
+        let asset = staked.asset.non_fungible_mut().swap_remove(idx.destroy_or!(abort EWrongId));
+        to_stake.push_back(asset);
+    });
+
+    Staked {
+        id: object::new(ctx),
+        dao_addr: staked.dao_addr,
+        value: to_stake.length(),
+        unstaked: option::none(),
+        asset: Adapter::NonFungible(to_stake),
     }
 }
 
 /// Starts cooldown for the staked asset
 public fun unstake<Asset: store>(
     staked: &mut Staked<Asset>,
+    account: &Account<Dao>,
     clock: &Clock,
 ) {
     assert!(staked.unstaked.is_none(), EAlreadyUnstaked);
-    staked.unstaked = option::some(clock.timestamp_ms());    
+    assert!(staked.dao_addr == account.addr(), EInvalidAccount);
+    
+    staked.unstaked = option::some(clock.timestamp_ms() + account.config().unstaking_cooldown);    
+}
+
+/// Retrieves the coin after cooldown
+public fun claim_coin<CoinType>(
+    staked: Staked<Coin<CoinType>>,
+    clock: &Clock,
+): Coin<CoinType> {
+    let Staked { id, mut unstaked, asset, .. } = staked;
+    id.delete();
+    
+    assert!(unstaked.is_some(), ENotUnstaked);
+    assert!(clock.timestamp_ms() >= unstaked.extract(), ENotClaimable);
+
+    asset.extract_fungible()
+}
+
+/// Retrieves the objects after cooldown
+public fun claim_objects<Asset: key + store>(
+    staked: Staked<Asset>,
+    clock: &Clock,
+): vector<Asset> {
+    let Staked { id, mut unstaked, asset, .. } = staked;
+    id.delete();
+    
+    assert!(unstaked.is_some(), ENotUnstaked);
+    assert!(clock.timestamp_ms() >= unstaked.extract(), ENotClaimable);
+
+    asset.extract_non_fungible()
 }
 
 /// Retrieves the staked asset after cooldown
-public fun claim<Asset: key + store>(
+public fun claim_and_keep<Asset: key + store>(
     staked: Staked<Asset>,
-    account: &mut Account<Dao>,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    let Staked { id, dao_addr, mut unstaked, asset, .. } = staked;
+    let Staked { id, mut unstaked, asset, .. } = staked;
     id.delete();
     
-    assert!(dao_addr == account.addr(), EInvalidAccount);
     assert!(unstaked.is_some(), ENotUnstaked);
-    assert!(clock.timestamp_ms() >= account.config().unstaking_cooldown + unstaked.extract(), ENotUnstaked);
+    assert!(clock.timestamp_ms() >= unstaked.extract(), ENotClaimable);
 
     match (asset) {
         Adapter::Fungible(coin) => {
@@ -394,6 +458,7 @@ public fun new_vote<Asset: store>(
     account: &mut Account<Dao>,
     intent_key: String,
     staked: Staked<Asset>,
+    clock: &Clock,
     ctx: &mut TxContext
 ): Vote<Asset> {
     assert!(account.intents().contains(intent_key), EInvalidIntentKey);
@@ -403,7 +468,8 @@ public fun new_vote<Asset: store>(
         id: object::new(ctx),
         dao_addr: account.addr(),
         intent_key,
-        voted: option::none(),
+        answer: option::none(),
+        power: staked.get_voting_power(account.config(), clock),
         vote_end: account.intents().get<Votes>(intent_key).outcome().end_time,
         staked,
     }
@@ -424,20 +490,18 @@ public fun vote<Asset: store>(
         EProposalNotActive
     );
 
-    let power = vote.staked.get_voting_power(account.config(), clock);
-
     account.resolve_intent!<_, Votes, _>(
         intent_key, 
         version::current(), 
         ConfigWitness(),
         |outcome| {
-            if (vote.voted.is_some()) {
-                let Voted(prev_answer, prev_power) = vote.voted.extract();
-                *outcome.results.get_mut(&prev_answer) = *outcome.results.get_mut(&prev_answer) - prev_power;
+            if (vote.answer.is_some()) {
+                let prev_answer = vote.answer.extract();
+                *outcome.results.get_mut(&prev_answer) = *outcome.results.get_mut(&prev_answer) - vote.power;
             };
 
-            *outcome.results.get_mut(&answer) = *outcome.results.get_mut(&answer) + power;
-            vote.voted.fill(Voted(answer, power));
+            *outcome.results.get_mut(&answer) = *outcome.results.get_mut(&answer) + vote.power;
+            vote.answer = option::some(answer);
         }
     );
 }
@@ -478,7 +542,7 @@ public fun validate_votes_outcome(
 ) {
     let Votes { results, end_time, .. } = outcome;
 
-    let total_votes = results[&YES] + results[&NO] + results[&ABSTAIN];
+    let total_votes = results[&YES] + results[&NO];
 
     assert!(end_time > clock.timestamp_ms(), EVoteNotEnded);
     assert!(total_votes >= dao.minimum_votes, EMinimumVotesNotReached);
@@ -602,8 +666,12 @@ public fun intent_key<Asset: store>(vote: &Vote<Asset>): String {
     vote.intent_key
 }
 
-public fun voted<Asset: store>(vote: &Vote<Asset>): Option<Voted> {
-    vote.voted
+public fun answer<Asset: store>(vote: &Vote<Asset>): Option<u8> {
+    vote.answer
+}
+
+public fun power<Asset: store>(vote: &Vote<Asset>): u64 {
+    vote.power
 }
 
 public fun vote_end<Asset: store>(vote: &Vote<Asset>): u64 {
@@ -612,11 +680,6 @@ public fun vote_end<Asset: store>(vote: &Vote<Asset>): u64 {
 
 public fun staked<Asset: store>(vote: &Vote<Asset>): &Staked<Asset> {
     &vote.staked
-}
-
-public use fun voted_values as Voted.values;
-public fun voted_values(voted: Voted): (u8, u64) {
-    (voted.0, voted.1)
 }
 
 // === Package functions ===
@@ -649,20 +712,50 @@ public(package) fun config_mut(account: &mut Account<Dao>): &mut Dao {
 
 // === Private functions ===
 
+fun fungible_mut<CoinType>(asset: &mut Adapter<Coin<CoinType>>): &mut Coin<CoinType> {
+    match (asset) {
+        Adapter::Fungible(coin) => coin,
+        Adapter::NonFungible(_notcoin) => abort ENotFungible,
+    }
+}
+
+fun non_fungible_mut<Obj: store>(asset: &mut Adapter<Obj>): &mut vector<Obj> {
+    match (asset) {
+        Adapter::Fungible(_coin) => abort ENotNonFungible,
+        Adapter::NonFungible(assets) => assets,
+    }
+}
+
+fun extract_fungible<CoinType>(asset: Adapter<Coin<CoinType>>): Coin<CoinType> {
+    match (asset) {
+        Adapter::Fungible(coin) => coin,
+        Adapter::NonFungible(_notcoin) => abort ENotFungible,
+    }
+}
+
+fun extract_non_fungible<Obj: store>(asset: Adapter<Obj>): vector<Obj> {
+    match (asset) {
+        Adapter::Fungible(_coin) => abort ENotNonFungible,
+        Adapter::NonFungible(assets) => assets,
+    }
+}
+
 /// Returns the voting multiplier depending on the cooldown [0, 1e9]
 fun get_voting_power<Asset: store>(
     staked: &Staked<Asset>,
     dao: &Dao,
     clock: &Clock,
 ): u64 {
-    let cooldown = dao.unstaking_cooldown;
     // find coef according to the cooldown
     let coef = if (staked.unstaked.is_none()) {
         MUL
     } else {
-        let time_passed = clock.timestamp_ms() - *staked.unstaked.borrow();
-        if (time_passed > cooldown) 0 else
-            math::mul_div_down(cooldown - time_passed, MUL, cooldown)
+        if (clock.timestamp_ms() >= *staked.unstaked.borrow()) {
+            0
+        } else {
+            let time_remaining = *staked.unstaked.borrow() - clock.timestamp_ms();
+            math::mul_div_down(time_remaining, MUL, dao.unstaking_cooldown)
+        }
     };
 
     // apply the voting rule to get the voting power
