@@ -30,7 +30,7 @@ use sui::{
     clock::Clock,
     vec_map::{Self, VecMap},
     coin::{Self, Coin},
-    table_vec::{Self, TableVec},
+    table::{Self, Table},
 };
 use account_extensions::extensions::Extensions;
 use account_protocol::{
@@ -92,8 +92,8 @@ public struct ConfigWitness() has drop;
 
 public struct Registry has key {
     id: UID,
-    // addresses of all known daos 
-    daos: TableVec<address>
+    // addresses of all known daos, address is key for easier fetching, bool is dummy field
+    daos: Table<address, bool>
 }
 
 /// Parent struct protecting the config
@@ -183,7 +183,7 @@ fun init(ctx: &mut TxContext) {
     transfer::share_object(
         Registry {
             id: object::new(ctx),
-            daos: table_vec::empty(ctx),
+            daos: table::new(ctx),
         }
     );
 }
@@ -224,7 +224,7 @@ public fun new_account<AssetType>(
         )
     );
 
-    registry.daos.push_back(account.addr());
+    registry.daos.add(account.addr(), true);
 
     account
 }

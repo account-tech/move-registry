@@ -16,6 +16,6 @@ subdir = "crates/sui-framework/packages/sui-framework"
 rev = "testnet"
 
 [addresses]
-account_multisig = "0xc72363568c0ffc937ea790a40f2ff093141b53d73eee43d53f15d4ff708cd606"
-account_protocol = "0x58438e1f3ecdaee65fc2076647bf04ac173bc4bb1335ee64027a17cf9f0bf5a7"
-account_extensions = "0x60bdbac4243b28773ca6d354fe5da75372552838d3fe766577bb48560600f27f"
+account_multisig = "0xe5dbd5e399a4b85547557a00066fd0ab72e8b7c53605de950fdf385091b33a29"
+account_protocol = "0x043d63bbb07420bcef4b933e6b0dd59d1fb42fa2fa5d1a39e91e26a5e6e50049"
+account_extensions = "0x2f10ccb3323bae290b908c48e383a4136e309ea47ec42d33f5671e4fd61f3953"

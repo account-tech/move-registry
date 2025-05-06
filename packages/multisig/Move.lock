@@ -2,15 +2,12 @@
 
 [move]
 version = 3
-manifest_digest = "B6F45184E765AAC4DDB912B7C23333B21A1436C16509D295AD58CD7F608C15B3"
-deps_digest = "52B406A7A21811BEF51751CF88DA0E76DAEFFEAC888D4F4060B1A72BBE7D8D35"
+manifest_digest = "0A57447BFA54805AF4A089613FC8B26F4855AC09DB4E701BA5B35D69AF77F6D3"
+deps_digest = "060AD7E57DFB13104F21BE5F5C3759D03F0553FC3229247D9A7A6B45F50D03A3"
 dependencies = [
   { id = "AccountExtensions", name = "AccountExtensions" },
   { id = "AccountProtocol", name = "AccountProtocol" },
-  { id = "Bridge", name = "Bridge" },
-  { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Sui", name = "Sui" },
-  { id = "SuiSystem", name = "SuiSystem" },
 ]
 
 [[move.package]]
@@ -18,10 +15,7 @@ id = "AccountExtensions"
 source = { local = "../../../move-framework/packages/extensions" }
 
 dependencies = [
-  { id = "Bridge", name = "Bridge" },
-  { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Sui", name = "Sui" },
-  { id = "SuiSystem", name = "SuiSystem" },
 ]
 
 [[move.package]]
@@ -30,47 +24,25 @@ source = { local = "../../../move-framework/packages/protocol" }
 
 dependencies = [
   { id = "AccountExtensions", name = "AccountExtensions" },
-  { id = "Bridge", name = "Bridge" },
-  { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Sui", name = "Sui" },
-  { id = "SuiSystem", name = "SuiSystem" },
-]
-
-[[move.package]]
-id = "Bridge"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "fbb68879cbd1", subdir = "crates/sui-framework/packages/bridge" }
-
-dependencies = [
-  { id = "MoveStdlib", name = "MoveStdlib" },
-  { id = "Sui", name = "Sui" },
-  { id = "SuiSystem", name = "SuiSystem" },
 ]
 
 [[move.package]]
 id = "MoveStdlib"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "fbb68879cbd1", subdir = "crates/sui-framework/packages/move-stdlib" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "testnet", subdir = "crates/sui-framework/packages/move-stdlib" }
 
 [[move.package]]
 id = "Sui"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "fbb68879cbd1", subdir = "crates/sui-framework/packages/sui-framework" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "testnet", subdir = "crates/sui-framework/packages/sui-framework" }
 
 dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
-]
-
-[[move.package]]
-id = "SuiSystem"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "fbb68879cbd1", subdir = "crates/sui-framework/packages/sui-system" }
-
-dependencies = [
-  { id = "MoveStdlib", name = "MoveStdlib" },
-  { id = "Sui", name = "Sui" },
 ]
 
 [env]
 
 [env.testnet]
 chain-id = "4c78adac"
-original-published-id = "0xc72363568c0ffc937ea790a40f2ff093141b53d73eee43d53f15d4ff708cd606"
-latest-published-id = "0xc72363568c0ffc937ea790a40f2ff093141b53d73eee43d53f15d4ff708cd606"
+original-published-id = "0xe5dbd5e399a4b85547557a00066fd0ab72e8b7c53605de950fdf385091b33a29"
+latest-published-id = "0xe5dbd5e399a4b85547557a00066fd0ab72e8b7c53605de950fdf385091b33a29"
 published-version = "1"
