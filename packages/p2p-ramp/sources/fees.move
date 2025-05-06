@@ -2,6 +2,7 @@ module p2p_ramp::fees;
 
 // === Imports ===
 
+use std::string::String;
 use std::type_name::{Self, TypeName};
 use sui::{
     coin::Coin,
@@ -15,6 +16,7 @@ const ERecipientAlreadyExists: u64 = 0;
 const ERecipientDoesNotExist: u64 = 1;
 const ETotalFeesTooHigh: u64 = 2;
 const ECoinTypeNotWhitelisted: u64 = 3;
+const EFiatTypeNotWhitelisted: u64 = 4;
 
 // === Constants ===
 
@@ -27,7 +29,9 @@ public struct Fees has key {
     // Map of addresses to their fees in bps
     inner: VecMap<address, u64>,
     // Set of allowed coin typestep vov
-    allowed_coins: VecSet<TypeName>
+    allowed_coins: VecSet<TypeName>,
+    // Set of allowed fiat currencies
+    allowed_fiat: VecSet<String>
 }
 
 public struct AdminCap has key, store {
@@ -41,6 +45,7 @@ fun init(ctx: &mut TxContext) {
         id: object::new(ctx),
         inner: vec_map::empty(),
         allowed_coins: vec_set::empty(),
+        allowed_fiat: vec_set::empty()
     });
     // we only need one admin cap since it will be held by the dev multisig
     transfer::public_transfer(
@@ -132,6 +137,36 @@ public fun is_coin_allowed<T>(fees: &Fees): bool {
 
 public fun assert_coin_allowed<T>(fees: &Fees) {
     assert!(is_coin_allowed<T>(fees), ECoinTypeNotWhitelisted)
+}
+
+public fun allow_fiat(
+    _: &AdminCap,
+    fiat_code: String,
+    fees: &mut Fees
+) {
+    fees.allowed_fiat.insert(fiat_code);
+}
+
+public fun disallow_fiat(
+    _: &AdminCap,
+    fiat_code: String,
+    fees: &mut Fees
+) {
+    fees.allowed_fiat.remove(&fiat_code);
+}
+
+public fun is_fiat_allowed(
+    fiat_code: String,
+    fees: &Fees
+): bool {
+    fees.allowed_fiat.contains(&fiat_code)
+}
+
+public fun assert_fiat_allowed(
+    fiat_code: String,
+    fees: &Fees
+) {
+    assert!(is_fiat_allowed(fiat_code, fees), EFiatTypeNotWhitelisted)
 }
 
 // === Private Functions ===
