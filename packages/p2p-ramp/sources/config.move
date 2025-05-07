@@ -4,16 +4,21 @@ module p2p_ramp::config;
 
 // === Imports ===
 
-use std::string::String;
 use account_protocol::{
-    intents::Expired,
+    intents::{Params, Expired},
     executable::Executable,
     account::{Account, Auth},
+    intent_interface,
 };
 use p2p_ramp::{
     p2p_ramp::{Self, P2PRamp, Active},
     version,
 };
+
+// === Aliases ===
+
+use fun intent_interface::build_intent as Account.build_intent;
+use fun intent_interface::process_intent as Account.process_intent;
 
 // === Structs ===
 
@@ -32,43 +37,41 @@ public struct ConfigP2PRampAction has drop, store {
 /// Requests new P2PRamp settings.
 public fun request_config_p2p_ramp(
     auth: Auth,
+    params: Params,
     outcome: Active,
-    account: &mut Account<P2PRamp, Active>, 
-    key: String,
-    description: String,
-    execution_time: u64,
-    expiration_time: u64,
+    account: &mut Account<P2PRamp>, 
     addrs: vector<address>,
     ctx: &mut TxContext
 ) {
     account.verify(auth);
 
-    let mut intent = account.create_intent(
-        key,
-        description,
-        vector[execution_time],
-        expiration_time,
-        b"".to_string(),
+    let config = p2p_ramp::new_config(addrs);
+    
+    account.build_intent!(
+        params,
         outcome,
+        b"".to_string(),
         version::current(),
         ConfigP2PRampIntent(),
-        ctx
+        ctx,
+        |intent, iw| intent.add_action(ConfigP2PRampAction { config }, iw)
     );
-
-    let config = p2p_ramp::new_config(addrs);
-
-    account.add_action(&mut intent, ConfigP2PRampAction { config }, version::current(), ConfigP2PRampIntent());
-    account.add_intent(intent, version::current(), ConfigP2PRampIntent());
 }
 
 /// Executes the action and modifies the Account P2PRamp.
 public fun execute_config_p2p_ramp(
-    mut executable: Executable,
-    account: &mut Account<P2PRamp, Active>, 
+    mut executable: Executable<Active>,
+    account: &mut Account<P2PRamp>, 
 ) {
-    let action: &ConfigP2PRampAction = account.process_action(&mut executable, version::current(), ConfigP2PRampIntent());
-    *p2p_ramp::config_mut(account) = action.config;
-    account.confirm_execution(executable, version::current(), ConfigP2PRampIntent());
+    account.process_intent!(
+        executable, 
+        version::current(),   
+        ConfigP2PRampIntent(), 
+        |executable, iw| {
+            let action = executable.next_action<Active, ConfigP2PRampAction, _>(iw);
+            *p2p_ramp::config_mut(account) = action.config;
+        }
+    );
 }
 
 /// Deletes the action in an expired intent.

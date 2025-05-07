@@ -156,17 +156,17 @@ public fun disallow_fiat(
 }
 
 public fun is_fiat_allowed(
+    fees: &Fees,
     fiat_code: String,
-    fees: &Fees
 ): bool {
     fees.allowed_fiat.contains(&fiat_code)
 }
 
 public fun assert_fiat_allowed(
+    fees: &Fees,
     fiat_code: String,
-    fees: &Fees
 ) {
-    assert!(is_fiat_allowed(fiat_code, fees), EFiatTypeNotWhitelisted)
+    assert!(is_fiat_allowed(fees, fiat_code), EFiatTypeNotWhitelisted)
 }
 
 // === Private Functions ===
