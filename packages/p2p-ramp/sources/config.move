@@ -11,7 +11,7 @@ use account_protocol::{
     intent_interface,
 };
 use p2p_ramp::{
-    p2p_ramp::{Self, P2PRamp, Active},
+    p2p_ramp::{Self, P2PRamp, Approved},
     version,
 };
 
@@ -38,7 +38,7 @@ public struct ConfigP2PRampAction has drop, store {
 public fun request_config_p2p_ramp(
     auth: Auth,
     params: Params,
-    outcome: Active,
+    outcome: Approved,
     account: &mut Account<P2PRamp>, 
     addrs: vector<address>,
     ctx: &mut TxContext
@@ -60,7 +60,7 @@ public fun request_config_p2p_ramp(
 
 /// Executes the action and modifies the Account P2PRamp.
 public fun execute_config_p2p_ramp(
-    mut executable: Executable<Active>,
+    mut executable: Executable<Approved>,
     account: &mut Account<P2PRamp>, 
 ) {
     account.process_intent!(
@@ -68,7 +68,7 @@ public fun execute_config_p2p_ramp(
         version::current(),   
         ConfigP2PRampIntent(), 
         |executable, iw| {
-            let action = executable.next_action<Active, ConfigP2PRampAction, _>(iw);
+            let action = executable.next_action<Approved, ConfigP2PRampAction, _>(iw);
             *p2p_ramp::config_mut(account) = action.config;
         }
     );
