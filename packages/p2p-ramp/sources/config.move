@@ -60,11 +60,11 @@ public fun request_config_p2p_ramp(
 
 /// Executes the action and modifies the Account P2PRamp.
 public fun execute_config_p2p_ramp(
-    mut executable: Executable<Approved>,
+    executable: &mut Executable<Approved>,
     account: &mut Account<P2PRamp>, 
 ) {
     account.process_intent!(
-        executable, 
+        executable,
         version::current(),   
         ConfigP2PRampIntent(), 
         |executable, iw| {
