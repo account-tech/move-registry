@@ -11,7 +11,7 @@ use sui::{
 use account_protocol::{
     account::{Account, Auth},
     executable::Executable,
-    intents::{Params, Expired},
+    intents::Params,
     intent_interface,
 };
 use p2p_ramp::{
@@ -139,6 +139,7 @@ public fun create_order<CoinType>(
     );
 }
 
+#[allow(lint(self_transfer))]
 public fun destroy_order<CoinType>(
     auth: Auth,
     account: &mut Account<P2PRamp>,
