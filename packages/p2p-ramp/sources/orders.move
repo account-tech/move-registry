@@ -249,7 +249,7 @@ public fun execute_fill_buy_order<CoinType>(
     ctx: &mut TxContext,
 ) {
     account.process_intent!<_, Handshake, _>(
-        executable, 
+        &mut executable,
         version::current(),   
         FillBuyIntent(), 
         |executable, iw| executable.next_action<_, FillBuyAction<CoinType>, _>(iw)
@@ -257,8 +257,8 @@ public fun execute_fill_buy_order<CoinType>(
 
     let key = executable.intent().key();
     account.confirm_execution(executable);
-    let expired = account.destroy_empty_intent<_, Handshake>(key);
-    let FillBuyAction<CoinType> { order_id, coin, .. } = expired.remove_action();
+    let mut expired = account.destroy_empty_intent<_, Handshake>(key);
+    let FillBuyAction<CoinType> { order_id, mut coin, .. } = expired.remove_action();
 
     let order = get_order_mut<CoinType>(account, order_id);
     order.pending_fill = order.pending_fill - coin.value();
@@ -276,7 +276,7 @@ public fun execute_fill_sell_order<CoinType>(
     ctx: &mut TxContext,
 ) {
     account.process_intent!<_, Handshake, _>(
-        executable, 
+        &mut executable,
         version::current(),   
         FillSellIntent(), 
         |executable, iw| executable.next_action<_, FillSellAction, _>(iw)
@@ -284,14 +284,14 @@ public fun execute_fill_sell_order<CoinType>(
 
     let key = executable.intent().key();
     account.confirm_execution(executable);
-    let expired = account.destroy_empty_intent<_, Handshake>(key);
+    let mut expired = account.destroy_empty_intent<_, Handshake>(key);
     let FillSellAction { order_id, amount, taker } = expired.remove_action();
 
     let order = get_order_mut<CoinType>(account, order_id);
     order.pending_fill = order.pending_fill - amount;
 
     let coin_for_fiat = order.get_price_ratio() * amount / MUL;
-    let coin = order.coin_balance.split(coin_for_fiat).into_coin(ctx);
+    let mut coin = order.coin_balance.split(coin_for_fiat).into_coin(ctx);
 
     fees.collect(&mut coin, ctx);
     transfer::public_transfer(coin, taker);
@@ -301,14 +301,14 @@ public fun execute_fill_sell_order<CoinType>(
 
 public fun resolve_dispute_buy_order<CoinType>(
     _: &AdminCap,
-    executable: Executable<Handshake>,
+    mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
     fees: &mut Fees,
     recipient: address,
     ctx: &mut TxContext,
 ) {
     account.process_intent!<_, Handshake, _>(
-        executable, 
+        &mut executable,
         version::current(),   
         FillBuyIntent(), 
         |executable, iw| executable.next_action<_, FillBuyAction<CoinType>, _>(iw)
@@ -316,8 +316,8 @@ public fun resolve_dispute_buy_order<CoinType>(
 
     let key = executable.intent().key();
     account.confirm_execution(executable);
-    let expired = account.destroy_empty_intent<_, Handshake>(key);
-    let FillBuyAction<CoinType> { order_id, coin, taker } = expired.remove_action();
+    let mut expired = account.destroy_empty_intent<_, Handshake>(key);
+    let FillBuyAction<CoinType> { order_id, mut coin, taker } = expired.remove_action();
 
     let order = get_order_mut<CoinType>(account, order_id);
     order.pending_fill = order.pending_fill - coin.value();
@@ -335,14 +335,14 @@ public fun resolve_dispute_buy_order<CoinType>(
 
 public fun resolve_dispute_sell_order<CoinType>(
     _: &AdminCap,
-    executable: Executable<Handshake>,
+    mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
     fees: &mut Fees,
     recipient: address,
     ctx: &mut TxContext,
 ) {
     account.process_intent!<_, Handshake, _>(
-        executable, 
+        &mut executable,
         version::current(),   
         FillSellIntent(), 
         |executable, iw| executable.next_action<_, FillSellAction, _>(iw)
@@ -350,14 +350,14 @@ public fun resolve_dispute_sell_order<CoinType>(
 
     let key = executable.intent().key();
     account.confirm_execution(executable);
-    let expired = account.destroy_empty_intent<_, Handshake>(key);
+    let mut expired = account.destroy_empty_intent<_, Handshake>(key);
     let FillSellAction { order_id, amount, taker } = expired.remove_action();
 
     let order = get_order_mut<CoinType>(account, order_id);
     order.pending_fill = order.pending_fill - amount;
 
     let coin_for_fiat = order.get_price_ratio() * amount / MUL;
-    let coin = order.coin_balance.split(coin_for_fiat).into_coin(ctx);
+    let mut coin = order.coin_balance.split(coin_for_fiat).into_coin(ctx);
 
     fees.collect(&mut coin, ctx);
 
