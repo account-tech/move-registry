@@ -1,5 +1,5 @@
 [package]
-name = "AccountMultisig"
+name = "AccountPayment"
 edition = "2024.beta"
 license = "Apache-2.0"
 authors = [ "Thouny (thouny@tuta.io)" ]
@@ -16,6 +16,6 @@ subdir = "crates/sui-framework/packages/sui-framework"
 rev = "testnet"
 
 [addresses]
-account_multisig = "0xe5dbd5e399a4b85547557a00066fd0ab72e8b7c53605de950fdf385091b33a29"
+account_payment = "0xd1dfd2aa93cc33b6780e567a502a6f771ac737fe75dbef3d51ca139e423bd1ed"
 account_protocol = "0x043d63bbb07420bcef4b933e6b0dd59d1fb42fa2fa5d1a39e91e26a5e6e50049"
 account_extensions = "0x2f10ccb3323bae290b908c48e383a4136e309ea47ec42d33f5671e4fd61f3953"
