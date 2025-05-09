@@ -15,7 +15,7 @@
 
 ## Quick Start
 
-[Provide a quick start guide for using this account type]
+[Provide a quick start guide for using or integrating this account type]
 
 ## Contributors
 
