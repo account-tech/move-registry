@@ -242,7 +242,7 @@ public fun request_fill_sell_order<CoinType>(
     );
 }
 
-public fun execute_fill_buy_order<CoinType, Handshake: store + copy + drop>(
+public fun execute_fill_buy_order<CoinType>(
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
     fees: &mut Fees,
@@ -269,7 +269,7 @@ public fun execute_fill_buy_order<CoinType, Handshake: store + copy + drop>(
     expired.destroy_empty();
 }
 
-public fun execute_fill_sell_order<CoinType, Handshake: store + copy + drop>(
+public fun execute_fill_sell_order<CoinType>(
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
     fees: &mut Fees,
@@ -299,7 +299,7 @@ public fun execute_fill_sell_order<CoinType, Handshake: store + copy + drop>(
     expired.destroy_empty();
 }
 
-public fun resolve_dispute_buy_order<CoinType, Handshake: store + copy + drop>(
+public fun resolve_dispute_buy_order<CoinType>(
     _: &AdminCap,
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
@@ -333,7 +333,7 @@ public fun resolve_dispute_buy_order<CoinType, Handshake: store + copy + drop>(
     expired.destroy_empty();
 }
 
-public fun resolve_dispute_sell_order<CoinType, Handshake: store + copy + drop>(
+public fun resolve_dispute_sell_order<CoinType>(
     _: &AdminCap,
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
