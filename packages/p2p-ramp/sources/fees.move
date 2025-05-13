@@ -141,16 +141,16 @@ public fun assert_coin_allowed<T>(fees: &Fees) {
 
 public fun allow_fiat(
     _: &AdminCap,
-    fiat_code: String,
-    fees: &mut Fees
+    fees: &mut Fees,
+    fiat_code: String
 ) {
     fees.allowed_fiat.insert(fiat_code);
 }
 
 public fun disallow_fiat(
     _: &AdminCap,
-    fiat_code: String,
-    fees: &mut Fees
+    fees: &mut Fees,
+    fiat_code: String
 ) {
     fees.allowed_fiat.remove(&fiat_code);
 }
