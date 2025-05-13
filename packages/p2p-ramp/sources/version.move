@@ -1,6 +1,6 @@
 /// This module tracks the version of the package
 
-module p2p::version;
+module p2p_ramp::version;
 
 // === Imports ===
 

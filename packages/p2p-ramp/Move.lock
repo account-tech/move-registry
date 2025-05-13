@@ -2,17 +2,16 @@
 
 [move]
 version = 3
-manifest_digest = "6C3BBDCD9247F6E051552A3E2563B8C90C8F44466C12D0005457F191E31FF544"
-deps_digest = "060AD7E57DFB13104F21BE5F5C3759D03F0553FC3229247D9A7A6B45F50D03A3"
+manifest_digest = "33E36B7FA9CDAEB78990A192EFCF3056B8E8DF710C32BABB9B77B205D0F3667F"
+deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
-  { id = "AccountExtensions", name = "AccountExtensions" },
   { id = "AccountProtocol", name = "AccountProtocol" },
   { id = "Sui", name = "Sui" },
 ]
 
 [[move.package]]
 id = "AccountExtensions"
-source = { local = "../../../move-framework/packages/extensions" }
+source = { git = "https://github.com/account-tech/move-framework.git", rev = "main", subdir = "packages/extensions" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -20,7 +19,7 @@ dependencies = [
 
 [[move.package]]
 id = "AccountProtocol"
-source = { local = "../../../move-framework/packages/protocol" }
+source = { git = "https://github.com/account-tech/move-framework.git", rev = "main", subdir = "packages/protocol" }
 
 dependencies = [
   { id = "AccountExtensions", name = "AccountExtensions" },
@@ -39,10 +38,7 @@ dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
 ]
 
-[env]
-
-[env.testnet]
-chain-id = "4c78adac"
-original-published-id = "0xd1dfd2aa93cc33b6780e567a502a6f771ac737fe75dbef3d51ca139e423bd1ed"
-latest-published-id = "0xd1dfd2aa93cc33b6780e567a502a6f771ac737fe75dbef3d51ca139e423bd1ed"
-published-version = "1"
+[move.toolchain-version]
+compiler-version = "1.47.0"
+edition = "2024.beta"
+flavor = "sui"
