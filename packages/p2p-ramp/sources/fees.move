@@ -27,7 +27,7 @@ const FEE_DENOMINATOR: u64 = 10_000;
 public struct Fees has key {
     id: UID,
     // Map of addresses to their fees in bps
-    inner: VecMap<address, u64>,
+    collectors: VecMap<address, u64>,
     // Set of allowed coin typestep vov
     allowed_coins: VecSet<TypeName>,
     // Set of allowed fiat currencies
@@ -43,7 +43,7 @@ public struct AdminCap has key, store {
 fun init(ctx: &mut TxContext) {
     transfer::share_object(Fees {
         id: object::new(ctx),
-        inner: vec_map::empty(),
+        collectors: vec_map::empty(),
         allowed_coins: vec_set::empty(),
         allowed_fiat: vec_set::empty()
     });
@@ -56,8 +56,8 @@ fun init(ctx: &mut TxContext) {
 
 // === View Functions ===
 
-public fun inner(fees: &Fees): VecMap<address, u64> {
-    fees.inner
+public fun collectors(fees: &Fees): VecMap<address, u64> {
+    fees.collectors
 }
 
 public fun allowed_coins(fees: &Fees): VecSet<TypeName> {
@@ -72,7 +72,7 @@ public(package) fun collect<CoinType>(
     ctx: &mut TxContext
 ) {
     let total_amount = coin.value();
-    let mut fees = fees.inner;
+    let mut fees = fees.collectors;
 
     while (!fees.is_empty()) {
         let (recipient, bps) = fees.pop();
@@ -83,35 +83,35 @@ public(package) fun collect<CoinType>(
 
 // === Admin Functions ===
 
-public fun add_fee(
+public fun add_collector(
     _: &AdminCap,
     fees: &mut Fees,
     recipient: address,
     bps: u64
 ) {
-    assert!(!fees.inner.contains(&recipient), ERecipientAlreadyExists);
-    fees.inner.insert(recipient, bps);
+    assert!(!fees.collectors.contains(&recipient), ERecipientAlreadyExists);
+    fees.collectors.insert(recipient, bps);
     fees.assert_fees_not_too_high();
 }
 
-public fun edit_fee(
+public fun edit_collector(
     _: &AdminCap,
     fees: &mut Fees,
     recipient: address,
     bps: u64
 ) {
-    assert!(fees.inner.contains(&recipient), ERecipientDoesNotExist);
-    *fees.inner.get_mut(&recipient) = bps;
+    assert!(fees.collectors.contains(&recipient), ERecipientDoesNotExist);
+    *fees.collectors.get_mut(&recipient) = bps;
     fees.assert_fees_not_too_high();
 }
 
-public fun remove_fee(
+public fun remove_collector(
     _: &AdminCap,
     fees: &mut Fees,
     recipient: address
 ) {
-    assert!(fees.inner.contains(&recipient), ERecipientDoesNotExist);
-    fees.inner.remove(&recipient);
+    assert!(fees.collectors.contains(&recipient), ERecipientDoesNotExist);
+    fees.collectors.remove(&recipient);
 }
 
 public fun allow_coin<T>(
@@ -172,7 +172,7 @@ public fun assert_fiat_allowed(
 // === Private Functions ===
 
 fun assert_fees_not_too_high(fees: &Fees) {
-    let (mut fees, mut total_bps) = (fees.inner, 0);
+    let (mut fees, mut total_bps) = (fees.collectors, 0);
 
     while (!fees.is_empty()) {
         let (_, bps) = fees.pop();
