@@ -64,6 +64,10 @@ public fun allowed_coins(fees: &Fees): VecSet<TypeName> {
     fees.allowed_coins
 }
 
+public fun allowed_fiat(fees: &Fees): VecSet<String> {
+    fees.allowed_fiat
+}
+
 // === Package Functions ===
 
 public(package) fun collect<CoinType>(
