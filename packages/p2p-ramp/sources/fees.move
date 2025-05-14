@@ -84,9 +84,9 @@ public(package) fun collect<CoinType>(
 // === Admin Functions ===
 
 public fun add_fee(
-    _: &AdminCap, 
-    fees: &mut Fees, 
-    recipient: address, 
+    _: &AdminCap,
+    fees: &mut Fees,
+    recipient: address,
     bps: u64
 ) {
     assert!(!fees.inner.contains(&recipient), ERecipientAlreadyExists);
@@ -95,9 +95,9 @@ public fun add_fee(
 }
 
 public fun edit_fee(
-    _: &AdminCap, 
-    fees: &mut Fees, 
-    recipient: address, 
+    _: &AdminCap,
+    fees: &mut Fees,
+    recipient: address,
     bps: u64
 ) {
     assert!(fees.inner.contains(&recipient), ERecipientDoesNotExist);
@@ -106,8 +106,8 @@ public fun edit_fee(
 }
 
 public fun remove_fee(
-    _: &AdminCap, 
-    fees: &mut Fees, 
+    _: &AdminCap,
+    fees: &mut Fees,
     recipient: address
 ) {
     assert!(fees.inner.contains(&recipient), ERecipientDoesNotExist);
@@ -181,3 +181,11 @@ fun assert_fees_not_too_high(fees: &Fees) {
 
     assert!(total_bps < FEE_DENOMINATOR / 2, ETotalFeesTooHigh);
 }
+
+// == Test Functions ==
+
+#[test_only]
+public fun init_for_testing(ctx: &mut TxContext) {
+    init(ctx);
+}
+
