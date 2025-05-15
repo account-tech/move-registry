@@ -9,4 +9,6 @@ Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-fram
 AccountProtocol = { git = "https://github.com/account-tech/move-framework.git", subdir = "packages/protocol", rev="main" }
 
 [addresses]
-p2p_ramp = "0x0"
+p2p_ramp = "0xb2ed46e2db9b8b46ab33bbb7a7bc6abca5da8bdfc4743c42b2d14403962d894c"
+# Fees = "0x8c06825f41cb7c9799bb329faa8a9c7a6eb9076433b7156e50a2c9969671fcd7"
+# AdminCap = "0xb7dad2e986d6100b2fae4a57d4c47c2cdfc430e629f19d1e8c52b1a46452d1ee"
