@@ -7,6 +7,7 @@ use std::string::String;
 use sui::{
     vec_set::{Self, VecSet},
     clock::Clock,
+    table::{Self, Table}
 };
 use account_extensions::extensions::Extensions;
 use account_protocol::{
@@ -16,6 +17,7 @@ use account_protocol::{
     deps,
     account_interface,
 };
+
 use p2p_ramp::{
     fees::AdminCap,
     version
@@ -44,6 +46,12 @@ const ENotDisputed: u64 = 9;
 
 /// Config ConfigWitness.
 public struct ConfigWitness() has drop;
+
+/// Central registry for all merchant accounts
+public struct Registry has key {
+    id: UID,
+    merchants: Table<address, bool>
+}
 
 /// Config struct with the members
 public struct P2PRamp has copy, drop, store {
@@ -81,10 +89,18 @@ public enum Status has copy, drop, store {
 
 // === Public functions ===
 
+fun init(ctx: &mut TxContext) {
+    transfer::share_object(Registry {
+        id: object::new(ctx),
+        merchants: table::new(ctx),
+    });
+}
+
 /// Init and returns a new Account object.
 /// Creator is added by default.
 /// AccountProtocol and P2PRamp are added as dependencies.
 public fun new_account(
+    registry: &mut Registry,
     extensions: &Extensions,
     ctx: &mut TxContext,
 ): Account<P2PRamp> {
@@ -92,7 +108,7 @@ public fun new_account(
         members: vec_set::from_keys(vector[ctx.sender()]),
     };
     
-    account_interface::create_account!(
+   let account = account_interface::create_account!(
         config,
         version::current(),
         ConfigWitness(),
@@ -101,7 +117,11 @@ public fun new_account(
             extensions,
             vector[b"AccountProtocol".to_string(), b"P2PRamp".to_string()]
         )
-    )
+    );
+    // we'll use the bool for toggling availability
+    registry.merchants.add(account.addr(), true);
+
+    account
 }
 
 /// Authenticates the caller as an owner of the P2PRamp account.
@@ -341,6 +361,11 @@ public(package) fun config_mut(account: &mut Account<P2PRamp>): &mut P2PRamp {
 }
 
 // === Test functions ===
+
+#[test_only]
+public fun init_for_testing(ctx: &mut TxContext) {
+    init(ctx);
+}
 
 #[test_only]
 public fun config_witness(): ConfigWitness {
