@@ -376,3 +376,11 @@ public fun config_witness(): ConfigWitness {
 public fun members_mut_for_testing(ramp: &mut P2PRamp): &mut VecSet<address> {
     &mut ramp.members
 }
+
+#[test_only]
+public fun add_member(
+    account: &mut P2PRamp,
+    addr: address,
+) {
+    account.members.insert(addr);
+}
