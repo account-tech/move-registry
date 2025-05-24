@@ -85,6 +85,7 @@ const EStartInPast: u64 = 14;
 const EInvalidAssetType: u64 = 15;
 const EWrongId: u64 = 16;
 const ENotClaimable: u64 = 17;
+const EInvalidMaxVotingPower: u64 = 18;
 
 // === Structs ===
 
@@ -98,12 +99,12 @@ public struct Registry has key {
 
 /// Parent struct protecting the config
 public struct Dao has copy, drop, store {
+    // groups and associated data
+    groups: vector<Group>,
     // object type allowed for voting
     asset_type: TypeName,
     // voting power required to authenticate as a member (submit proposal, open vault, etc)
     auth_voting_power: u64,
-    // groups and associated data
-    groups: vector<Group>,
     // cooldown when unstaking, voting power decreases linearly over time
     unstaking_cooldown: u64,
     // type of voting mechanism, u8 so we can add more in the future
@@ -196,11 +197,18 @@ public fun new_account<AssetType>(
     unstaking_cooldown: u64,
     voting_rule: u8,
     max_voting_power: u64,
-    voting_quorum: u64,
     minimum_votes: u64,
+    voting_quorum: u64,
     ctx: &mut TxContext,
 ): Account<Dao> {
     assert!(voting_rule & VOTING_RULE == voting_rule, EInvalidVotingRule);
+    if (voting_rule == LINEAR) {
+        assert!(max_voting_power >= auth_voting_power, EInvalidMaxVotingPower);
+    } else if (voting_rule == QUADRATIC) {
+        assert!(max_voting_power >= math::sqrt_down(auth_voting_power), EInvalidMaxVotingPower);
+    } else {
+        abort EInvalidVotingRule
+    };
 
     let config = Dao {
         groups: vector[],
@@ -209,8 +217,8 @@ public fun new_account<AssetType>(
         unstaking_cooldown,
         voting_rule,
         max_voting_power,
-        voting_quorum,
         minimum_votes,
+        voting_quorum,
     };
 
     let account = account_interface::create_account!(
@@ -544,7 +552,7 @@ public fun validate_votes_outcome(
 
     let total_votes = results[&YES] + results[&NO];
 
-    assert!(end_time > clock.timestamp_ms(), EVoteNotEnded);
+    assert!(clock.timestamp_ms() > end_time, EVoteNotEnded);
     assert!(total_votes >= dao.minimum_votes, EMinimumVotesNotReached);
     assert!(
         math::mul_div_down(results[&YES], MUL, total_votes) >= dao.voting_quorum, 
@@ -760,7 +768,7 @@ fun get_voting_power<Asset: store>(
 
     // apply the voting rule to get the voting power
     let voting_power = if (dao.voting_rule == LINEAR) {
-        coef * staked.value / MUL
+        math::mul_div_down(coef, staked.value, MUL)
     } else if (dao.voting_rule == QUADRATIC) {
         math::sqrt_down(coef * staked.value) / MUL
     } else {
