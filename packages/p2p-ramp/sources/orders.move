@@ -41,6 +41,16 @@ const MUL: u64 = 1_000_000_000;
 
 // === Events ===
 
+public struct CreateOrderEvent has copy, drop {
+    is_buy: bool,
+    fiat_amount: u64,
+    fiat_code: String,
+    coin_amount: u64,
+    min_fill: u64,
+    max_fill: u64,
+    order_id: address
+}
+
 public struct FillRequestEvent has copy, drop {
     is_buy: bool,
     order_id: address,
@@ -131,6 +141,16 @@ public fun create_order<CoinType>(
         coin_balance,
         pending_fill: 0,
     };
+
+    event::emit(CreateOrderEvent {
+        is_buy,
+        fiat_amount,
+        fiat_code,
+        coin_amount,
+        min_fill,
+        max_fill,
+        order_id
+    });
 
     account.add_managed_data(
         OrderKey(order_id),
