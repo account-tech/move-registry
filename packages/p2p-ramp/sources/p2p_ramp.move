@@ -198,7 +198,7 @@ public fun execute_approved_intent(
 
 // Handshake (order) intents
 
-public(package) fun requested_handshake_outcome(
+public fun requested_handshake_outcome(
     fiat_sender: address,
     coin_sender: address,
 ): Handshake {
@@ -214,7 +214,6 @@ public fun flag_as_paid(
     key: String,
     ctx: &TxContext,
 ) {
-
     account.resolve_intent!<_, Handshake, _>(
         key, 
         version::current(), 
