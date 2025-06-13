@@ -51,6 +51,11 @@ public struct CreateOrderEvent has copy, drop {
     order_id: address
 }
 
+public struct DestroyOrderEvent has copy, drop {
+    by: address,
+    order_id: address
+}
+
 public struct FillRequestEvent has copy, drop {
     is_buy: bool,
     order_id: address,
@@ -175,6 +180,12 @@ public fun destroy_order<CoinType>(
     } = account.remove_managed_data(OrderKey(order_id), version::current());
 
     assert!(pending_fill == 0, ECannotDestroyOrder);
+
+    event::emit(DestroyOrderEvent {
+        by: account.addr(),
+        order_id
+    });
+
     transfer::public_transfer(coin_balance.into_coin(ctx), ctx.sender());
 }
 
