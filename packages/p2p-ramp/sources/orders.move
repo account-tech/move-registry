@@ -7,6 +7,7 @@ use sui::{
     balance::Balance,
     coin::Coin,
     event,
+    vec_set
 };
 use account_protocol::{
     account::{Account, Auth},
@@ -207,8 +208,8 @@ public fun request_fill_buy_order<CoinType>(
     coin: Coin<CoinType>,
     ctx: &mut TxContext,
 ) {
-    assert!(outcome.coin_sender() == ctx.sender(), ENotCoinSender);
-    assert!(account.config().members().contains(&outcome.fiat_sender()), ENotFiatSender);
+    assert!(outcome.coin_senders().contains(&ctx.sender()), ENotCoinSender);
+    assert!(contains_any!(&account.config().members(), &outcome.fiat_senders()), ENotFiatSender);
 
     let order_mut = get_order_mut<CoinType>(account, order_id);
 
@@ -245,8 +246,8 @@ public fun request_fill_sell_order<CoinType>(
     amount: u64,
     ctx: &mut TxContext,
 ) {
-    assert!(outcome.fiat_sender() == ctx.sender(), ENotFiatSender);
-    assert!(account.config().members().contains(&outcome.coin_sender()), ENotCoinSender);
+    assert!(outcome.fiat_senders().contains(&ctx.sender()), ENotFiatSender);
+    assert!(contains_any!(&account.config().members(), &outcome.coin_senders()), ENotCoinSender);
 
     let order_mut = get_order_mut<CoinType>(account, order_id);
 
@@ -434,3 +435,18 @@ fun assert_can_be_filled<CoinType>(order: &Order<CoinType>, amount: u64) {
         EFillOutOfRange
     );
 }
+
+macro fun contains_any<$K: copy + drop>($a: &vec_set::VecSet<$K>, $b: &vec_set::VecSet<$K>): bool {
+    let keys_b = vec_set::keys($b);
+    let len = vector::length(keys_b);
+    let mut i = 0;
+    while (i < len) {
+        let key = &keys_b[i];
+        if (vec_set::contains($a, key)) {
+            return true
+        };
+        i = i + 1;
+    };
+    false
+}
+

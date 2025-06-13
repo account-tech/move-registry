@@ -67,10 +67,10 @@ public struct Approved has copy, drop, store {
 
 /// Outcome for resolving an order
 public struct Handshake has copy, drop, store {
-    // address of the party that will send the fiat
-    fiat_sender: address, 
-    // address of the party that will send the coin
-    coin_sender: address, 
+    // addresses of the party that will send the fiat
+    fiat_senders: VecSet<address>,
+    // addresses of the party that will send the coin
+    coin_senders: VecSet<address>,
     // status of the handshake
     status: Status,
 }
@@ -199,12 +199,12 @@ public fun execute_approved_intent(
 // Handshake (order) intents
 
 public fun requested_handshake_outcome(
-    fiat_sender: address,
-    coin_sender: address,
+    fiat_senders: vector<address>,
+    coin_senders: vector<address>,
 ): Handshake {
     Handshake { 
-        fiat_sender,
-        coin_sender,
+        fiat_senders: vec_set::from_keys(fiat_senders),
+        coin_senders: vec_set::from_keys(coin_senders),
         status: Status::Requested,
     }
 }
@@ -220,7 +220,7 @@ public fun flag_as_paid(
         ConfigWitness(), 
         |outcome| {
             assert!(outcome.status == Status::Requested, ENotRequested);
-            assert!(outcome.fiat_sender == ctx.sender(), ENotFiatSender);
+            assert!(outcome.fiat_senders.contains(&ctx.sender()), ENotFiatSender);
             outcome.status = Status::Paid;
         }
     );
@@ -237,7 +237,7 @@ public fun flag_as_settled(
         ConfigWitness(), 
         |outcome| {
             assert!(outcome.status == Status::Paid, ENotPaid);
-            assert!(outcome.coin_sender == ctx.sender(), ENotCoinSender);
+            assert!(outcome.coin_senders.contains(&ctx.sender()), ENotCoinSender);
             outcome.status = Status::Settled;
         }
     );
@@ -256,8 +256,8 @@ public fun flag_as_disputed(
             assert!(
                 (outcome.status == Status::Requested ||
                 outcome.status == Status::Paid) &&
-                (outcome.coin_sender == ctx.sender() || 
-                outcome.fiat_sender == ctx.sender()), 
+                (outcome.coin_senders.contains(&ctx.sender()) ||
+                outcome.fiat_senders.contains(&ctx.sender())),
                 ECannotDispute
             );
             outcome.status = Status::Disputed;
@@ -333,12 +333,12 @@ public fun approved(active: &Approved): bool {
     active.approved
 }
 
-public fun fiat_sender(handshake: &Handshake): address {
-    handshake.fiat_sender
+public fun fiat_senders(handshake: &Handshake): VecSet<address> {
+    handshake.fiat_senders
 }
 
-public fun coin_sender(handshake: &Handshake): address {
-    handshake.coin_sender
+public fun coin_senders(handshake: &Handshake): VecSet<address> {
+    handshake.coin_senders
 }
 
 public fun status(handshake: &Handshake): Status {
