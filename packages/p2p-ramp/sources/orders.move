@@ -7,7 +7,8 @@ use sui::{
     balance::Balance,
     coin::Coin,
     event,
-    vec_set
+    vec_set,
+    clock::Clock
 };
 use account_protocol::{
     account::{Account, Auth},
@@ -15,8 +16,9 @@ use account_protocol::{
     intents::Params,
     intent_interface,
 };
+
 use p2p_ramp::{
-    p2p_ramp::{P2PRamp, Handshake},
+    p2p_ramp::{Self, P2PRamp, Handshake},
     fees::{Fees, AdminCap},
     version,
 };
@@ -35,6 +37,7 @@ const ENotSellOrder: u64 = 4;
 const ENotFiatSender: u64 = 5;
 const ENotCoinSender: u64 = 6;
 const ECannotDestroyOrder: u64 = 7;
+const EDeadlineTooShort: u64 = 8;
 
 // === Constants ===
 
@@ -49,6 +52,7 @@ public struct CreateOrderEvent has copy, drop {
     coin_amount: u64,
     min_fill: u64,
     max_fill: u64,
+    fill_deadline_ms: u64,
     order_id: address
 }
 
@@ -63,6 +67,7 @@ public struct FillRequestEvent has copy, drop {
     fiat_amount: u64,
     coin_amount: u64,
     taker: address,
+    fill_deadline_ms: u64,
 }
 
 // === Structs ===
@@ -108,6 +113,8 @@ public struct Order<phantom CoinType> has store {
     fiat_code: String,
     // selling coin value
     coin_amount: u64,
+    // The time in ms a taker has to mark a fill as 'Paid'
+    fill_deadline_ms: u64,
     // balance to be bought or sold
     coin_balance: Balance<CoinType>,
     // amount being filled
@@ -127,6 +134,7 @@ public fun create_order<CoinType>(
     coin_amount: u64,
     min_fill: u64,
     max_fill: u64,
+    fill_deadline_ms: u64,
     coin_balance: Balance<CoinType>, // 0 if buy
     ctx: &mut TxContext,
 ) {
@@ -136,6 +144,9 @@ public fun create_order<CoinType>(
     fees.assert_fiat_allowed(fiat_code);
     fees.assert_coin_allowed<CoinType>();
 
+    // the minimum deadline must be 15 mins
+    assert!(fill_deadline_ms >= fees.min_fill_deadline_ms(), EDeadlineTooShort);
+
     let order_id = ctx.fresh_object_address();
     let order = Order<CoinType> {
         is_buy,
@@ -144,6 +155,7 @@ public fun create_order<CoinType>(
         coin_amount,
         min_fill,
         max_fill,
+        fill_deadline_ms,
         coin_balance,
         pending_fill: 0,
     };
@@ -155,6 +167,7 @@ public fun create_order<CoinType>(
         coin_amount,
         min_fill,
         max_fill,
+        fill_deadline_ms,
         order_id
     });
 
@@ -202,10 +215,11 @@ public fun get_order<CoinType>(
 /// Customer deposits coin to get fiat
 public fun request_fill_buy_order<CoinType>(
     params: Params,
-    outcome: Handshake,
+    mut outcome: Handshake,
     account: &mut Account<P2PRamp>,
     order_id: address,
     coin: Coin<CoinType>,
+    clock: &Clock,
     ctx: &mut TxContext,
 ) {
     assert!(outcome.coin_senders().contains(&ctx.sender()), ENotCoinSender);
@@ -218,12 +232,17 @@ public fun request_fill_buy_order<CoinType>(
 
     order_mut.pending_fill = order_mut.pending_fill + coin.value();
 
+    // --- AUTHORITATIVE DEADLINE OVERWRITE ---
+    let correct_deadline = clock.timestamp_ms() + order_mut.fill_deadline_ms;
+    p2p_ramp::set_payment_deadline(&mut outcome, correct_deadline);
+
     event::emit(FillRequestEvent {
         is_buy: true,
         order_id,
         fiat_amount: order_mut.get_price_ratio() * coin.value() / MUL,
         coin_amount: coin.value(),
         taker: ctx.sender(),
+        fill_deadline_ms: correct_deadline,
     });
 
     account.build_intent!(
@@ -240,10 +259,11 @@ public fun request_fill_buy_order<CoinType>(
 /// Customer requests to get coins by paying with fiat
 public fun request_fill_sell_order<CoinType>(
     params: Params,
-    outcome: Handshake,
+    mut outcome: Handshake,
     account: &mut Account<P2PRamp>,
     order_id: address,
     amount: u64,
+    clock: &Clock,
     ctx: &mut TxContext,
 ) {
     assert!(outcome.fiat_senders().contains(&ctx.sender()), ENotFiatSender);
@@ -256,12 +276,17 @@ public fun request_fill_sell_order<CoinType>(
 
     order_mut.pending_fill = order_mut.pending_fill + amount;
 
+    // --- AUTHORITATIVE DEADLINE OVERWRITE ---
+    let correct_deadline = clock.timestamp_ms() + order_mut.fill_deadline_ms;
+    p2p_ramp::set_payment_deadline(&mut outcome, correct_deadline);
+
     event::emit(FillRequestEvent {
         is_buy: false,
         order_id,
         fiat_amount: amount,
         coin_amount: order_mut.get_price_ratio() * amount / MUL,
         taker: ctx.sender(),
+        fill_deadline_ms:correct_deadline,
     });
 
     account.build_intent!(
@@ -283,8 +308,8 @@ public fun execute_fill_buy_order<CoinType>(
 ) {
     account.process_intent!<_, Handshake, _>(
         &mut executable,
-        version::current(),   
-        FillBuyIntent(), 
+        version::current(),
+        FillBuyIntent(),
         |executable, iw| executable.next_action<_, FillBuyAction<CoinType>, _>(iw)
     );
 
@@ -310,8 +335,8 @@ public fun execute_fill_sell_order<CoinType>(
 ) {
     account.process_intent!<_, Handshake, _>(
         &mut executable,
-        version::current(),   
-        FillSellIntent(), 
+        version::current(),
+        FillSellIntent(),
         |executable, iw| executable.next_action<_, FillSellAction, _>(iw)
     );
 
@@ -342,8 +367,8 @@ public fun resolve_dispute_buy_order<CoinType>(
 ) {
     account.process_intent!<_, Handshake, _>(
         &mut executable,
-        version::current(),   
-        FillBuyIntent(), 
+        version::current(),
+        FillBuyIntent(),
         |executable, iw| executable.next_action<_, FillBuyAction<CoinType>, _>(iw)
     );
 
@@ -376,8 +401,8 @@ public fun resolve_dispute_sell_order<CoinType>(
 ) {
     account.process_intent!<_, Handshake, _>(
         &mut executable,
-        version::current(),   
-        FillSellIntent(), 
+        version::current(),
+        FillSellIntent(),
         |executable, iw| executable.next_action<_, FillSellAction, _>(iw)
     );
 
@@ -403,6 +428,59 @@ public fun resolve_dispute_sell_order<CoinType>(
     expired.destroy_empty();
 }
 
+public fun resolve_expired_buy_order_fill<CoinType>(
+    mut executable: Executable<Handshake>,
+    account: &mut Account<P2PRamp>,
+) {
+
+    account.process_intent!<_, Handshake, _>(
+        &mut executable,
+        version::current(),
+        FillBuyIntent(),
+        |executable, iw| executable.next_action<_, FillBuyAction<CoinType>, _>(iw)
+    );
+
+    let key = executable.intent().key();
+    account.confirm_execution(executable);
+    let mut expired = account.destroy_empty_intent<_, Handshake>(key);
+    let FillBuyAction<CoinType> { order_id, coin, taker } = expired.remove_action();
+
+    let order = get_order_mut<CoinType>(account, order_id);
+    order.pending_fill = order.pending_fill - coin.value();
+
+    transfer::public_transfer(coin, taker);
+
+    expired.destroy_empty();
+}
+
+public fun resolve_expired_sell_order_fill<CoinType>(
+    mut executable: Executable<Handshake>,
+    account: &mut Account<P2PRamp>,
+    ctx: &mut TxContext,
+) {
+    account.process_intent!<_, Handshake, _>(
+        &mut executable,
+        version::current(),
+        FillSellIntent(),
+|       executable, iw| executable.next_action<_, FillSellAction, _>(iw)
+    );
+
+    let key = executable.intent().key();
+    account.confirm_execution(executable);
+    let mut expired = account.destroy_empty_intent<_, Handshake>(key);
+    let FillSellAction { order_id, amount, .. } = expired.remove_action();
+
+    let order = get_order_mut<CoinType>(account, order_id);
+    order.pending_fill = order.pending_fill - amount;
+
+    let coin_for_fiat = order.get_price_ratio() * amount / MUL;
+    let coin = order.coin_balance.split(coin_for_fiat).into_coin(ctx);
+
+    order.coin_balance.join(coin.into_balance());
+
+    expired.destroy_empty();
+}
+
 // === Private functions ===
 
 fun get_order_mut<CoinType>(
@@ -422,7 +500,7 @@ fun get_price_ratio<CoinType>(order: &Order<CoinType>): u64 {
 
 fun assert_can_be_filled<CoinType>(order: &Order<CoinType>, amount: u64) {
     assert!(
-        amount >= order.min_fill && amount <= order.max_fill, 
+        amount >= order.min_fill && amount <= order.max_fill,
         EFillOutOfRange
     );
 

@@ -41,6 +41,8 @@ const ENotCoinSender: u64 = 6;
 const ECannotDispute: u64 = 7;
 const ENotSettled: u64 = 8;
 const ENotDisputed: u64 = 9;
+const EPaymentWindowExpired: u64 = 10;
+const EPaymentWindowNotExpired: u64 = 11;
 
 // === Structs ===
 
@@ -62,7 +64,7 @@ public struct P2PRamp has copy, drop, store {
 /// Outcome struct with the approved address
 public struct Approved has copy, drop, store {
     // if owner approved the intent
-    approved: bool, 
+    approved: bool,
 }
 
 /// Outcome for resolving an order
@@ -73,6 +75,9 @@ public struct Handshake has copy, drop, store {
     coin_senders: VecSet<address>,
     // status of the handshake
     status: Status,
+    // ms by which payment must be flagged. Whatever the taker passes to this will be overwritten
+    // by the order authority
+    payment_deadline_ms: u64,
 }
 
 /// Enum for tracking request status
@@ -107,7 +112,7 @@ public fun new_account(
     let config = P2PRamp {
         members: vec_set::from_keys(vector[ctx.sender()]),
     };
-    
+
    let account = account_interface::create_account!(
         config,
         version::current(),
@@ -152,8 +157,8 @@ public fun approve_intent(
     account.config().assert_is_member(ctx);
 
     account.resolve_intent!<_, Approved, _>(
-        key, 
-        version::current(), 
+        key,
+        version::current(),
         ConfigWitness(),
         |outcome| {
             assert!(!outcome.approved, EAlreadyApproved);
@@ -171,26 +176,26 @@ public fun disapprove_intent(
     account.config().assert_is_member(ctx);
 
     account.resolve_intent!<_, Approved, _>(
-        key, 
-        version::current(), 
+        key,
+        version::current(),
         ConfigWitness(),
-        |outcome| { 
+        |outcome| {
             assert!(outcome.approved, ENotApproved);
-            outcome.approved = false 
+            outcome.approved = false
         }
     );
 }
 
 /// Anyone can execute an intent, this allows to automate the execution of intents.
 public fun execute_approved_intent(
-    account: &mut Account<P2PRamp>, 
-    key: String, 
+    account: &mut Account<P2PRamp>,
+    key: String,
     clock: &Clock,
 ): Executable<Approved> {
     account.execute_intent!<_, Approved, _>(
-        key, 
-        clock, 
-        version::current(), 
+        key,
+        clock,
+        version::current(),
         ConfigWitness(),
         |outcome| assert!(outcome.approved == true, ENotApproved)
     )
@@ -202,23 +207,33 @@ public fun requested_handshake_outcome(
     fiat_senders: vector<address>,
     coin_senders: vector<address>,
 ): Handshake {
-    Handshake { 
+    Handshake {
         fiat_senders: vec_set::from_keys(fiat_senders),
         coin_senders: vec_set::from_keys(coin_senders),
+        payment_deadline_ms: 0,
         status: Status::Requested,
     }
+}
+
+public(package) fun set_payment_deadline(
+    handshake: &mut Handshake,
+    new_deadline: u64,
+) {
+    handshake.payment_deadline_ms = new_deadline;
 }
 
 public fun flag_as_paid(
     account: &mut Account<P2PRamp>,
     key: String,
+    clock: &Clock,
     ctx: &TxContext,
 ) {
     account.resolve_intent!<_, Handshake, _>(
-        key, 
-        version::current(), 
-        ConfigWitness(), 
+        key,
+        version::current(),
+        ConfigWitness(),
         |outcome| {
+            assert!(clock.timestamp_ms() <= outcome.payment_deadline_ms, EPaymentWindowExpired);
             assert!(outcome.status == Status::Requested, ENotRequested);
             assert!(outcome.fiat_senders.contains(&ctx.sender()), ENotFiatSender);
             outcome.status = Status::Paid;
@@ -232,9 +247,9 @@ public fun flag_as_settled(
     ctx: &TxContext,
 ) {
     account.resolve_intent!<_, Handshake, _>(
-        key, 
-        version::current(), 
-        ConfigWitness(), 
+        key,
+        version::current(),
+        ConfigWitness(),
         |outcome| {
             assert!(outcome.status == Status::Paid, ENotPaid);
             assert!(outcome.coin_senders.contains(&ctx.sender()), ENotCoinSender);
@@ -249,9 +264,9 @@ public fun flag_as_disputed(
     ctx: &TxContext,
 ) {
     account.resolve_intent!<_, Handshake, _>(
-        key, 
-        version::current(), 
-        ConfigWitness(), 
+        key,
+        version::current(),
+        ConfigWitness(),
         |outcome| {
             assert!(
                 (outcome.status == Status::Requested ||
@@ -266,14 +281,14 @@ public fun flag_as_disputed(
 }
 
 public fun execute_handshake_intent(
-    account: &mut Account<P2PRamp>, 
-    key: String, 
+    account: &mut Account<P2PRamp>,
+    key: String,
     clock: &Clock,
 ): Executable<Handshake> {
     account.execute_intent!<_, Handshake, _>(
-        key, 
-        clock, 
-        version::current(), 
+        key,
+        clock,
+        version::current(),
         ConfigWitness(),
         |outcome| assert!(outcome.status == Status::Settled, ENotSettled)
     )
@@ -281,16 +296,33 @@ public fun execute_handshake_intent(
 
 public fun resolve_handshake_intent(
     _: &AdminCap,
-    account: &mut Account<P2PRamp>, 
-    key: String, 
+    account: &mut Account<P2PRamp>,
+    key: String,
     clock: &Clock,
 ): Executable<Handshake> {
     account.execute_intent!<_, Handshake, _>(
-        key, 
-        clock, 
-        version::current(), 
+        key,
+        clock,
+        version::current(),
         ConfigWitness(),
         |outcome| assert!(outcome.status == Status::Disputed, ENotDisputed)
+    )
+}
+
+public fun resolve_handshake_intent_expired_fill(
+    account: &mut Account<P2PRamp>,
+    key: String,
+    clock: &Clock,
+) : Executable<Handshake> {
+    account.execute_intent!<_, Handshake, _>(
+        key,
+        clock,
+        version::current(),
+        ConfigWitness(),
+        |outcome|  {
+            assert!(clock.timestamp_ms() > outcome.payment_deadline_ms, EPaymentWindowNotExpired);
+            assert!(outcome.status == Status::Requested, ENotRequested);
+        }
     )
 }
 

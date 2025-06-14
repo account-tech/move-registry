@@ -21,6 +21,7 @@ const EFiatTypeNotWhitelisted: u64 = 4;
 // === Constants ===
 
 const FEE_DENOMINATOR: u64 = 10_000;
+const MIN_FILL_DEADLINE_MS: u64 = 900_000;
 
 // === Structs ===
 
@@ -31,7 +32,9 @@ public struct Fees has key {
     // Set of allowed coin typestep vov
     allowed_coins: VecSet<TypeName>,
     // Set of allowed fiat currencies
-    allowed_fiat: VecSet<String>
+    allowed_fiat: VecSet<String>,
+    // The minimum time a merchant can set for a fill deadline.
+    min_fill_deadline_ms: u64,
 }
 
 public struct AdminCap has key, store {
@@ -45,7 +48,8 @@ fun init(ctx: &mut TxContext) {
         id: object::new(ctx),
         collectors: vec_map::empty(),
         allowed_coins: vec_set::empty(),
-        allowed_fiat: vec_set::empty()
+        allowed_fiat: vec_set::empty(),
+        min_fill_deadline_ms: MIN_FILL_DEADLINE_MS
     });
     // we only need one admin cap since it will be held by the dev multisig
     transfer::public_transfer(
@@ -66,6 +70,10 @@ public fun allowed_coins(fees: &Fees): VecSet<TypeName> {
 
 public fun allowed_fiat(fees: &Fees): VecSet<String> {
     fees.allowed_fiat
+}
+
+public fun min_fill_deadline_ms(fees: &Fees): u64 {
+    fees.min_fill_deadline_ms
 }
 
 // === Package Functions ===
@@ -132,6 +140,14 @@ public fun disallow_coin<T>(
 ) {
     let type_name = type_name::get<T>();
     fees.allowed_coins.remove(&type_name);
+}
+
+public fun set_min_fill_deadline(
+    _: &AdminCap,
+    fees: &mut Fees,
+    new_min_deadline_ms: u64,
+) {
+    fees.min_fill_deadline_ms = new_min_deadline_ms;
 }
 
 public fun is_coin_allowed<T>(fees: &Fees): bool {
