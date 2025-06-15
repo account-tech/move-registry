@@ -3,11 +3,15 @@ module p2p_ramp::p2p_ramp;
 
 // === Imports ===
 
-use std::string::String;
+use std::{
+    string::String,
+    type_name::{Self, TypeName}
+};
 use sui::{
     vec_set::{Self, VecSet},
     clock::Clock,
-    table::{Self, Table}
+    table::{Self, Table},
+    vec_map::{Self, VecMap},
 };
 use account_extensions::extensions::Extensions;
 use account_protocol::{
@@ -61,6 +65,19 @@ public struct P2PRamp has copy, drop, store {
     members: VecSet<address>,
 }
 
+public struct Reputation has store {
+    successful_trades: u64,
+    failed_trades: u64,
+    total_coin_volume: VecMap<TypeName, u64>,
+    total_fiat_volume: VecMap<String, u64>,
+    total_release_time_ms: u128,
+    disputes_won: u64,
+    disputes_lost: u64,
+}
+
+/// Df key for Reputation
+public struct ReputationKey() has copy, drop, store;
+
 /// Outcome struct with the approved address
 public struct Approved has copy, drop, store {
     // if owner approved the intent
@@ -78,6 +95,10 @@ public struct Handshake has copy, drop, store {
     // ms by which payment must be flagged. Whatever the taker passes to this will be overwritten
     // by the order authority
     payment_deadline_ms: u64,
+    // timestamp of when the fiat sender confirmed payment.
+    paid_timestamp_ms: u64,
+    // timestamp of when the coin sender confirmed receipt of fiat.
+    settled_timestamp_ms: u64,
 }
 
 /// Enum for tracking request status
@@ -113,7 +134,7 @@ public fun new_account(
         members: vec_set::from_keys(vector[ctx.sender()]),
     };
 
-   let account = account_interface::create_account!(
+   let mut account = account_interface::create_account!(
         config,
         version::current(),
         ConfigWitness(),
@@ -123,6 +144,22 @@ public fun new_account(
             vector[b"AccountProtocol".to_string(), b"P2PRamp".to_string()]
         )
     );
+
+    // we start tracking key metrics for this account
+    account.add_managed_data(
+        ReputationKey(),
+        Reputation {
+            successful_trades: 0,
+            failed_trades: 0,
+            total_coin_volume: vec_map::empty(),
+            total_fiat_volume: vec_map::empty(),
+            total_release_time_ms: 0,
+            disputes_won: 0,
+            disputes_lost: 0,
+        },
+        version::current(),
+    );
+
     // we'll use the bool for toggling availability
     registry.merchants.add(account.addr(), true);
 
@@ -201,6 +238,46 @@ public fun execute_approved_intent(
     )
 }
 
+/// Allows a merchant to execute a cancellation on a BUY ORDER fill
+/// that they have not yet paid for.
+public fun execute_merchant_cancellation_intent(
+    account: &mut Account<P2PRamp>,
+    key: String,
+    clock: &Clock,
+    ctx: &TxContext,
+): Executable<Handshake> {
+    account.config().assert_is_member(ctx);
+
+    account.execute_intent!<_, Handshake, _>(
+        key,
+        clock,
+        version::current(),
+        ConfigWitness(),
+        |outcome| {
+            assert!(outcome.status == Status::Requested, ENotRequested);
+            assert!(outcome.fiat_senders.contains(&ctx.sender()), ENotFiatSender);
+        }
+    )
+}
+
+public fun execute_sell_order_taker_cancellation(
+    account: &mut Account<P2PRamp>,
+    key: String,
+    clock: &Clock,
+    ctx: &mut TxContext,
+): Executable<Handshake> {
+    account.execute_intent!<_, Handshake, _>(
+        key,
+        clock,
+        version::current(),
+        ConfigWitness(),
+        |outcome| {
+            assert!(outcome.status == Status::Requested, ENotRequested);
+            assert!(outcome.fiat_senders.contains(&ctx.sender()), ENotFiatSender);
+        }
+    )
+}
+
 // Handshake (order) intents
 
 public fun requested_handshake_outcome(
@@ -211,15 +288,10 @@ public fun requested_handshake_outcome(
         fiat_senders: vec_set::from_keys(fiat_senders),
         coin_senders: vec_set::from_keys(coin_senders),
         payment_deadline_ms: 0,
+        paid_timestamp_ms: 0,
+        settled_timestamp_ms: 0,
         status: Status::Requested,
     }
-}
-
-public(package) fun set_payment_deadline(
-    handshake: &mut Handshake,
-    new_deadline: u64,
-) {
-    handshake.payment_deadline_ms = new_deadline;
 }
 
 public fun flag_as_paid(
@@ -236,6 +308,7 @@ public fun flag_as_paid(
             assert!(clock.timestamp_ms() <= outcome.payment_deadline_ms, EPaymentWindowExpired);
             assert!(outcome.status == Status::Requested, ENotRequested);
             assert!(outcome.fiat_senders.contains(&ctx.sender()), ENotFiatSender);
+            outcome.paid_timestamp_ms = clock.timestamp_ms();
             outcome.status = Status::Paid;
         }
     );
@@ -244,6 +317,7 @@ public fun flag_as_paid(
 public fun flag_as_settled(
     account: &mut Account<P2PRamp>,
     key: String,
+    clock: &Clock,
     ctx: &TxContext,
 ) {
     account.resolve_intent!<_, Handshake, _>(
@@ -253,6 +327,7 @@ public fun flag_as_settled(
         |outcome| {
             assert!(outcome.status == Status::Paid, ENotPaid);
             assert!(outcome.coin_senders.contains(&ctx.sender()), ENotCoinSender);
+            outcome.settled_timestamp_ms = clock.timestamp_ms();
             outcome.status = Status::Settled;
         }
     );
@@ -373,8 +448,78 @@ public fun coin_senders(handshake: &Handshake): VecSet<address> {
     handshake.coin_senders
 }
 
+public fun payment_deadline_ms(handshake: &Handshake): u64 {
+    handshake.payment_deadline_ms
+}
+
+public fun paid_timestamp_ms(handshake: &Handshake): u64 {
+    handshake.paid_timestamp_ms
+}
+
+public fun settled_timestamp_ms(handshake: &Handshake): u64 {
+    handshake.settled_timestamp_ms
+}
+
 public fun status(handshake: &Handshake): Status {
     handshake.status
+}
+
+public fun successful_trades(account: &Account<P2PRamp>) : u64 {
+    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+    rep.successful_trades
+}
+
+public fun total_coin_volume(account: &Account<P2PRamp>): VecMap<TypeName, u64> {
+    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+    return rep.total_coin_volume
+}
+
+public fun total_fiat_volume(account: &Account<P2PRamp>): VecMap<String, u64> {
+    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+    return rep.total_fiat_volume
+}
+
+public fun total_release_time_ms(account: &Account<P2PRamp>): u128 {
+    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+    return rep.total_release_time_ms
+}
+
+public fun disputes_won(account: &Account<P2PRamp>): u64 {
+    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+    return rep.disputes_won
+}
+
+public fun disputes_lost(account: &Account<P2PRamp>): u64 {
+    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+    return rep.disputes_lost
+}
+
+/// Calculates and returns the average release time for a given Account.
+public fun avg_release_time_ms(account: &Account<P2PRamp>): u64 {
+    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+
+    if (rep.successful_trades == 0) {
+        return 0
+    };
+
+    (rep.total_release_time_ms / (rep.successful_trades as u128)) as u64
+}
+
+/// Calculates and returns the merchant's completion rate for a given Account.
+public fun completion_rate(account: &Account<P2PRamp>): u8 {
+    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+
+    let successful = rep.successful_trades;
+    let failed = rep.failed_trades;
+    let total = successful + failed;
+
+    if (total == 0) {
+        return 100
+    };
+
+    let rate = (successful * 100) / total;
+
+    rate as u8
 }
 
 // === Package functions ===
@@ -389,6 +534,61 @@ public(package) fun new_config(
 /// Returns a mutable reference to the P2PRamp configuration.
 public(package) fun config_mut(account: &mut Account<P2PRamp>): &mut P2PRamp {
     account.config_mut(version::current(), ConfigWitness())
+}
+
+/// Returns a mutable reference to the account reputation
+public(package) fun get_rep_mut(
+    account: &mut Account<P2PRamp>,
+) : &mut Reputation {
+    account.borrow_managed_data_mut(ReputationKey(), version::current())
+}
+
+public(package) fun set_payment_deadline(
+    handshake: &mut Handshake,
+    new_deadline: u64,
+) {
+    handshake.payment_deadline_ms = new_deadline;
+}
+
+/// Updates accounts' reputation for successful trades
+public(package) fun record_successful_trade<CoinType>(
+    account: &mut Account<P2PRamp>,
+    fiat_code: String,
+    fiat_amount: u64,
+    coin_amount: u64,
+    release_time_ms: u64,
+) {
+    let rep = get_rep_mut(account);
+    let coin_type_name = type_name::get<CoinType>();
+    rep.successful_trades = rep.successful_trades + 1;
+
+    let current_fiat_vol = rep.total_fiat_volume.get_mut(&fiat_code);
+    *current_fiat_vol = *current_fiat_vol + fiat_amount;
+
+    let current_coin_vol = rep.total_coin_volume.get_mut(&coin_type_name);
+    *current_coin_vol = *current_coin_vol + coin_amount;
+
+    rep.total_release_time_ms = rep.total_release_time_ms + (release_time_ms as u128);
+}
+
+public(package) fun record_dispute_outcome(
+    account: &mut Account<P2PRamp>,
+    winner: address,
+) {
+    let members = account.config().members();
+    let rep = get_rep_mut(account);
+
+    if (members.contains(&winner)) {
+        rep.disputes_won = rep.disputes_won + 1;
+    } else {
+        rep.disputes_lost = rep.disputes_lost + 1;
+        rep.failed_trades = rep.failed_trades + 1;
+    }
+}
+
+public(package) fun record_failed_trade(account: &mut Account<P2PRamp>) {
+    let rep = get_rep_mut(account);
+    rep.failed_trades = rep.failed_trades + 1;
 }
 
 // === Test functions ===

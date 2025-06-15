@@ -15,6 +15,7 @@ use account_protocol::{
     executable::Executable,
     intents::Params,
     intent_interface,
+    intents::{Self},
 };
 
 use p2p_ramp::{
@@ -314,6 +315,9 @@ public fun execute_fill_buy_order<CoinType>(
     );
 
     let key = executable.intent().key();
+    let outcome = intents::outcome(executable.intent());
+    let paid_time = outcome.paid_timestamp_ms();
+    let settled_time = outcome.settled_timestamp_ms();
     account.confirm_execution(executable);
     let mut expired = account.destroy_empty_intent<_, Handshake>(key);
     let FillBuyAction<CoinType> { order_id, mut coin, .. } = expired.remove_action();
@@ -321,8 +325,15 @@ public fun execute_fill_buy_order<CoinType>(
     let order = get_order_mut<CoinType>(account, order_id);
     order.pending_fill = order.pending_fill - coin.value();
 
+    let fiat_amount = get_price_ratio<CoinType>(order) * coin.value() / MUL;
+    let coin_amount = coin.value();
+    let release_time = settled_time - paid_time;
+
     fees.collect(&mut coin, ctx);
     order.coin_balance.join(coin.into_balance());
+
+    // update accounts' reputation
+    p2p_ramp::record_successful_trade<CoinType>(account, order.fiat_code, fiat_amount, coin_amount, release_time);
 
     expired.destroy_empty();
 }
@@ -388,6 +399,8 @@ public fun resolve_dispute_buy_order<CoinType>(
         order.coin_balance.join(coin.into_balance());
     };
 
+    p2p_ramp::record_dispute_outcome(account, recipient);
+
     expired.destroy_empty();
 }
 
@@ -424,6 +437,8 @@ public fun resolve_dispute_sell_order<CoinType>(
     } else {
         order.coin_balance.join(coin.into_balance());
     };
+
+    p2p_ramp::record_dispute_outcome(account, recipient);
 
     expired.destroy_empty();
 }
@@ -477,6 +492,69 @@ public fun resolve_expired_sell_order_fill<CoinType>(
     let coin = order.coin_balance.split(coin_for_fiat).into_coin(ctx);
 
     order.coin_balance.join(coin.into_balance());
+
+    expired.destroy_empty();
+}
+
+/// Allow a merchant to cancel a fill on their own BUY order
+/// before they have sent payment. Returns the taker's locked coins to them.
+public fun merchant_cancel_fill<CoinType>(
+    auth: Auth,
+    account: &mut Account<P2PRamp>,
+    mut executable: Executable<Handshake>,
+) {
+    account.verify(auth);
+
+    account.process_intent!<_, Handshake, _>(
+        &mut executable,
+        version::current(),
+        FillBuyIntent(),
+        |executable, iw| executable.next_action<_, FillBuyAction<CoinType>, _>(iw)
+    );
+
+    let key = executable.intent().key();
+    account.confirm_execution(executable);
+    let mut expired = account.destroy_empty_intent<_, Handshake>(key);
+    let FillBuyAction<CoinType> { order_id, coin, taker } = expired.remove_action();
+
+    let order = get_order_mut<CoinType>(account, order_id);
+    // Revert the pending fill amount on the order.
+    order.pending_fill = order.pending_fill - coin.value();
+
+    // CRITICAL: Return the locked coins to the taker, making them whole.
+    transfer::public_transfer(coin, taker);
+
+    p2p_ramp::record_failed_trade(account);
+
+    expired.destroy_empty();
+}
+
+/// NEW: Public function for a taker to cancel their fill on a SELL order
+/// before they have sent payment. Refunds their gas_bond.
+public fun taker_cancel_sell_order_fill<CoinType>(
+    account: &mut Account<P2PRamp>,
+    mut executable: Executable<Handshake>,
+    ctx: &mut TxContext,
+) {
+    account.process_intent!<_, Handshake, _>(
+        &mut executable,
+        version::current(),
+        FillSellIntent(),
+            |executable, iw| executable.next_action<_, FillSellAction, _>(iw)
+    );
+
+    let key = executable.intent().key();
+    account.confirm_execution(executable);
+    let mut expired = account.destroy_empty_intent<_, Handshake>(key);
+    let FillSellAction { order_id, amount, taker } = expired.remove_action();
+
+    assert!(ctx.sender() == taker, ENotFiatSender);
+
+    let order = get_order_mut<CoinType>(account, order_id);
+    order.pending_fill = order.pending_fill - amount;
+
+    // CRITICAL: Return the taker's good-faith deposit to them
+    // transfer::public_transfer(gas_bond, taker, ctx);
 
     expired.destroy_empty();
 }
