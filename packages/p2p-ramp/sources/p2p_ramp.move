@@ -12,6 +12,7 @@ use sui::{
     clock::Clock,
     table::{Self, Table},
     vec_map::{Self, VecMap},
+    event,
 };
 use account_extensions::extensions::Extensions;
 use account_protocol::{
@@ -47,6 +48,14 @@ const ENotSettled: u64 = 8;
 const ENotDisputed: u64 = 9;
 const EPaymentWindowExpired: u64 = 10;
 const EPaymentWindowNotExpired: u64 = 11;
+
+// === Events ===
+
+public struct FillEvent has copy, drop {
+    status: Status,
+    key: String,
+    by: address
+}
 
 // === Structs ===
 
@@ -145,7 +154,7 @@ public fun new_account(
         )
     );
 
-    // we start tracking key metrics for this account
+    // we initialize key metrics for this account
     account.add_managed_data(
         ReputationKey(),
         Reputation {
@@ -300,6 +309,7 @@ public fun flag_as_paid(
     clock: &Clock,
     ctx: &TxContext,
 ) {
+    let sender = ctx.sender();
     account.resolve_intent!<_, Handshake, _>(
         key,
         version::current(),
@@ -307,11 +317,18 @@ public fun flag_as_paid(
         |outcome| {
             assert!(clock.timestamp_ms() <= outcome.payment_deadline_ms, EPaymentWindowExpired);
             assert!(outcome.status == Status::Requested, ENotRequested);
-            assert!(outcome.fiat_senders.contains(&ctx.sender()), ENotFiatSender);
+            assert!(outcome.fiat_senders.contains(&sender), ENotFiatSender);
             outcome.paid_timestamp_ms = clock.timestamp_ms();
             outcome.status = Status::Paid;
         }
     );
+
+    event::emit(FillEvent {
+        status: Status::Paid,
+        key,
+        by: sender
+    });
+
 }
 
 public fun flag_as_settled(
@@ -320,17 +337,24 @@ public fun flag_as_settled(
     clock: &Clock,
     ctx: &TxContext,
 ) {
+    let sender = ctx.sender();
     account.resolve_intent!<_, Handshake, _>(
         key,
         version::current(),
         ConfigWitness(),
         |outcome| {
             assert!(outcome.status == Status::Paid, ENotPaid);
-            assert!(outcome.coin_senders.contains(&ctx.sender()), ENotCoinSender);
+            assert!(outcome.coin_senders.contains(&sender), ENotCoinSender);
             outcome.settled_timestamp_ms = clock.timestamp_ms();
             outcome.status = Status::Settled;
         }
     );
+
+    event::emit(FillEvent {
+        status: Status::Settled,
+        key,
+        by: sender,
+    });
 }
 
 public fun flag_as_disputed(
@@ -338,6 +362,7 @@ public fun flag_as_disputed(
     key: String,
     ctx: &TxContext,
 ) {
+    let sender = ctx.sender();
     account.resolve_intent!<_, Handshake, _>(
         key,
         version::current(),
@@ -346,13 +371,19 @@ public fun flag_as_disputed(
             assert!(
                 (outcome.status == Status::Requested ||
                 outcome.status == Status::Paid) &&
-                (outcome.coin_senders.contains(&ctx.sender()) ||
-                outcome.fiat_senders.contains(&ctx.sender())),
+                (outcome.coin_senders.contains(&sender) ||
+                outcome.fiat_senders.contains(&sender)),
                 ECannotDispute
             );
             outcome.status = Status::Disputed;
         }
     );
+
+    event::emit(FillEvent {
+        status: Status::Disputed,
+        key,
+        by: sender,
+    });
 }
 
 public fun execute_handshake_intent(

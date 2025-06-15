@@ -11,7 +11,7 @@ use sui::{
     clock::Clock
 };
 use account_protocol::{
-    account::{Account, Auth},
+    account::{Self, Account, Auth},
     executable::Executable,
     intents::Params,
     intent_interface,
@@ -71,6 +71,30 @@ public struct FillRequestEvent has copy, drop {
     fill_deadline_ms: u64,
 }
 
+public struct FillCompletedEvent has copy, drop {
+    is_buy: bool,
+    key: String,
+    order_id: address,
+    completed_by: address,
+}
+
+public struct FillCancelledEvent has copy, drop {
+    kind: CancellationKind,
+    is_buy: bool,
+    key: String,
+    order_id: address,
+    cancelled_by: address,
+    reason: String,
+}
+
+public struct DisputeResolvedEvent has copy, drop {
+    is_buy: bool,
+    key: String,
+    order_id: address,
+    winner: address,
+    losser: address,
+}
+
 // === Structs ===
 
 /// Intent witness for filling buy orders
@@ -120,6 +144,12 @@ public struct Order<phantom CoinType> has store {
     coin_balance: Balance<CoinType>,
     // amount being filled
     pending_fill: u64,
+}
+
+public enum CancellationKind has copy, drop {
+    Expired,
+    VoluntaryByTaker,
+    VoluntaryByMerchant,
 }
 
 // === Public functions ===
@@ -332,6 +362,13 @@ public fun execute_fill_buy_order<CoinType>(
     fees.collect(&mut coin, ctx);
     order.coin_balance.join(coin.into_balance());
 
+    event::emit(FillCompletedEvent {
+        is_buy: true,
+        key,
+        order_id,
+        completed_by: ctx.sender(),
+    });
+
     // update accounts' reputation
     p2p_ramp::record_successful_trade<CoinType>(account, order.fiat_code, fiat_amount, coin_amount, release_time);
 
@@ -352,6 +389,9 @@ public fun execute_fill_sell_order<CoinType>(
     );
 
     let key = executable.intent().key();
+    let outcome = intents::outcome(executable.intent());
+    let paid_time = outcome.paid_timestamp_ms();
+    let settled_time = outcome.settled_timestamp_ms();
     account.confirm_execution(executable);
     let mut expired = account.destroy_empty_intent<_, Handshake>(key);
     let FillSellAction { order_id, amount, taker } = expired.remove_action();
@@ -362,8 +402,21 @@ public fun execute_fill_sell_order<CoinType>(
     let coin_for_fiat = order.get_price_ratio() * amount / MUL;
     let mut coin = order.coin_balance.split(coin_for_fiat).into_coin(ctx);
 
+    let coin_amount = coin.value();
+    let release_time = settled_time - paid_time;
+
     fees.collect(&mut coin, ctx);
     transfer::public_transfer(coin, taker);
+
+    event::emit(FillCompletedEvent {
+        is_buy: false,
+        key,
+        order_id,
+        completed_by: ctx.sender(),
+    });
+
+    // update accounts' reputation
+    p2p_ramp::record_successful_trade<CoinType>(account, order.fiat_code, coin_for_fiat, coin_amount, release_time);
 
     expired.destroy_empty();
 }
@@ -393,11 +446,21 @@ public fun resolve_dispute_buy_order<CoinType>(
 
     fees.collect(&mut coin, ctx);
 
-    if (taker == recipient) {
+    let (winner, losser) = if (taker == recipient) {
         transfer::public_transfer(coin, recipient);
+        (taker, account::addr(account))
     } else {
         order.coin_balance.join(coin.into_balance());
+        (account::addr(account), taker)
     };
+
+    event::emit(DisputeResolvedEvent {
+        is_buy: true,
+        key,
+        order_id,
+        winner,
+        losser
+    });
 
     p2p_ramp::record_dispute_outcome(account, recipient);
 
@@ -432,11 +495,21 @@ public fun resolve_dispute_sell_order<CoinType>(
 
     fees.collect(&mut coin, ctx);
 
-    if (taker == recipient) {
+    let (winner, losser) = if (taker == recipient) {
         transfer::public_transfer(coin, recipient);
+        (taker, account::addr(account))
     } else {
         order.coin_balance.join(coin.into_balance());
+        (account::addr(account), taker)
     };
+
+    event::emit(DisputeResolvedEvent {
+        is_buy: false,
+        key,
+        order_id,
+        winner,
+        losser
+    });
 
     p2p_ramp::record_dispute_outcome(account, recipient);
 
@@ -446,6 +519,7 @@ public fun resolve_dispute_sell_order<CoinType>(
 public fun resolve_expired_buy_order_fill<CoinType>(
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
+    ctx: &mut TxContext,
 ) {
 
     account.process_intent!<_, Handshake, _>(
@@ -462,6 +536,15 @@ public fun resolve_expired_buy_order_fill<CoinType>(
 
     let order = get_order_mut<CoinType>(account, order_id);
     order.pending_fill = order.pending_fill - coin.value();
+
+    event::emit(FillCancelledEvent {
+        kind: CancellationKind::Expired,
+        is_buy: true,
+        key,
+        order_id,
+        cancelled_by: ctx.sender(),
+        reason: b"system".to_string(),
+    });
 
     transfer::public_transfer(coin, taker);
 
@@ -493,6 +576,15 @@ public fun resolve_expired_sell_order_fill<CoinType>(
 
     order.coin_balance.join(coin.into_balance());
 
+    event::emit(FillCancelledEvent {
+        kind: CancellationKind::Expired,
+        is_buy: false,
+        key,
+        order_id,
+        cancelled_by: ctx.sender(),
+        reason: b"system".to_string(),
+    });
+
     expired.destroy_empty();
 }
 
@@ -501,7 +593,9 @@ public fun resolve_expired_sell_order_fill<CoinType>(
 public fun merchant_cancel_fill<CoinType>(
     auth: Auth,
     account: &mut Account<P2PRamp>,
+    reason: String,
     mut executable: Executable<Handshake>,
+    ctx: &mut TxContext,
 ) {
     account.verify(auth);
 
@@ -521,6 +615,15 @@ public fun merchant_cancel_fill<CoinType>(
     // Revert the pending fill amount on the order.
     order.pending_fill = order.pending_fill - coin.value();
 
+    event::emit(FillCancelledEvent {
+        kind: CancellationKind::VoluntaryByMerchant,
+        is_buy: order.is_buy,
+        key,
+        order_id,
+        cancelled_by: ctx.sender(),
+        reason,
+    });
+
     // CRITICAL: Return the locked coins to the taker, making them whole.
     transfer::public_transfer(coin, taker);
 
@@ -533,6 +636,7 @@ public fun merchant_cancel_fill<CoinType>(
 /// before they have sent payment. Refunds their gas_bond.
 public fun taker_cancel_sell_order_fill<CoinType>(
     account: &mut Account<P2PRamp>,
+    reason: String,
     mut executable: Executable<Handshake>,
     ctx: &mut TxContext,
 ) {
@@ -552,6 +656,15 @@ public fun taker_cancel_sell_order_fill<CoinType>(
 
     let order = get_order_mut<CoinType>(account, order_id);
     order.pending_fill = order.pending_fill - amount;
+
+    event::emit(FillCancelledEvent {
+        kind: CancellationKind::VoluntaryByTaker,
+        is_buy: order.is_buy,
+        key,
+        order_id,
+        cancelled_by: taker,
+        reason,
+    });
 
     // CRITICAL: Return the taker's good-faith deposit to them
     // transfer::public_transfer(gas_bond, taker, ctx);
