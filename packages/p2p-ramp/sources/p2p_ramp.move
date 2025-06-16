@@ -315,9 +315,9 @@ public fun flag_as_paid(
         version::current(),
         ConfigWitness(),
         |outcome| {
-            assert!(clock.timestamp_ms() <= outcome.payment_deadline_ms, EPaymentWindowExpired);
             assert!(outcome.status == Status::Requested, ENotRequested);
             assert!(outcome.fiat_senders.contains(&sender), ENotFiatSender);
+            assert!(clock.timestamp_ms() <= outcome.payment_deadline_ms, EPaymentWindowExpired);
             outcome.paid_timestamp_ms = clock.timestamp_ms();
             outcome.status = Status::Paid;
         }
