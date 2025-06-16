@@ -17,6 +17,7 @@ const ERecipientDoesNotExist: u64 = 1;
 const ETotalFeesTooHigh: u64 = 2;
 const ECoinTypeNotWhitelisted: u64 = 3;
 const EFiatTypeNotWhitelisted: u64 = 4;
+const EMinFillDeadlineTooLow: u64 = 5;
 
 // === Constants ===
 
@@ -142,14 +143,6 @@ public fun disallow_coin<T>(
     fees.allowed_coins.remove(&type_name);
 }
 
-public fun set_min_fill_deadline(
-    _: &AdminCap,
-    fees: &mut Fees,
-    new_min_deadline_ms: u64,
-) {
-    fees.min_fill_deadline_ms = new_min_deadline_ms;
-}
-
 public fun is_coin_allowed<T>(fees: &Fees): bool {
     let type_name = type_name::get<T>();
     fees.allowed_coins.contains(&type_name)
@@ -187,6 +180,22 @@ public fun assert_fiat_allowed(
     fiat_code: String,
 ) {
     assert!(is_fiat_allowed(fees, fiat_code), EFiatTypeNotWhitelisted)
+}
+
+public fun set_min_fill_deadline(
+    _: &AdminCap,
+    fees: &mut Fees,
+    new_min_fill_deadline_ms: u64,
+) {
+    assert_min_fill_deadline_too_low(new_min_fill_deadline_ms);
+    fees.min_fill_deadline_ms = new_min_fill_deadline_ms;
+}
+
+
+public fun assert_min_fill_deadline_too_low(
+    new_min_fill_deadline_ms: u64
+) {
+    assert!(new_min_fill_deadline_ms >= MIN_FILL_DEADLINE_MS, EMinFillDeadlineTooLow);
 }
 
 // === Private Functions ===
