@@ -495,39 +495,36 @@ public fun status(handshake: &Handshake): Status {
     handshake.status
 }
 
-public fun successful_trades(account: &Account<P2PRamp>) : u64 {
-    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+public fun reputation(account: &Account<P2PRamp>): &Reputation {
+    account.borrow_managed_data(ReputationKey(), version::current())
+}
+
+public fun successful_trades(rep: &Reputation) : u64 {
     rep.successful_trades
 }
 
-public fun total_coin_volume(account: &Account<P2PRamp>): VecMap<TypeName, u64> {
-    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+public fun total_coin_volume(rep: &Reputation): VecMap<TypeName, u64> {
     return rep.total_coin_volume
 }
 
-public fun total_fiat_volume(account: &Account<P2PRamp>): VecMap<String, u64> {
-    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+public fun total_fiat_volume(rep: &Reputation): VecMap<String, u64> {
     return rep.total_fiat_volume
 }
 
-public fun total_release_time_ms(account: &Account<P2PRamp>): u128 {
-    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+public fun total_release_time_ms(rep: &Reputation): u128 {
     return rep.total_release_time_ms
 }
 
-public fun disputes_won(account: &Account<P2PRamp>): u64 {
-    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+public fun disputes_won(rep: &Reputation): u64 {
     return rep.disputes_won
 }
 
-public fun disputes_lost(account: &Account<P2PRamp>): u64 {
-    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+public fun disputes_lost(rep: &Reputation): u64 {
     return rep.disputes_lost
 }
 
 /// Calculates and returns the average release time for a given Account.
-public fun avg_release_time_ms(account: &Account<P2PRamp>): u64 {
-    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+public fun avg_release_time_ms(rep: &Reputation): u64 {
 
     if (rep.successful_trades == 0) {
         return 0
@@ -537,15 +534,14 @@ public fun avg_release_time_ms(account: &Account<P2PRamp>): u64 {
 }
 
 /// Calculates and returns the merchant's completion rate for a given Account.
-public fun completion_rate(account: &Account<P2PRamp>): u8 {
-    let rep: &Reputation = account.borrow_managed_data(ReputationKey(), version::current());
+public fun completion_rate(rep: &Reputation): u8 {
 
     let successful = rep.successful_trades;
     let failed = rep.failed_trades;
     let total = successful + failed;
 
     if (total == 0) {
-        return 100
+        return 0
     };
 
     let rate = (successful * 100) / total;
