@@ -503,6 +503,10 @@ public fun successful_trades(rep: &Reputation) : u64 {
     rep.successful_trades
 }
 
+public fun failed_trades(rep: &Reputation): u64 {
+    rep.failed_trades
+}
+
 public fun total_coin_volume(rep: &Reputation): VecMap<TypeName, u64> {
     return rep.total_coin_volume
 }
