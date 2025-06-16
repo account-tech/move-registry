@@ -19,6 +19,8 @@ const OWNER: address = @0xCAFE;
 const ALICE: address = @0xA11CE;
 const BOB: address = @0xB0B;
 
+const MIN_FILL_DEADLINE_MS: u64 = 900_000;
+
 // === Helpers ===
 
 fun start(): (Scenario, Fees, AdminCap) {
@@ -46,6 +48,7 @@ fun test_getters() {
     assert!(fees.collectors().is_empty());
     assert!(fees.allowed_coins().is_empty());
     assert!(fees.allowed_fiat().is_empty());
+    assert!(fees.min_fill_deadline_ms() == MIN_FILL_DEADLINE_MS);
 
     end(scenario, fees, cap);
 }
@@ -180,6 +183,25 @@ fun test_edit_collectors_total_fees_too_high() {
 
     cap.add_collector(&mut fees, ALICE, 2500);
     cap.edit_collector(&mut fees, ALICE, 5000);
+
+    end(scenario, fees, cap);
+}
+
+#[test]
+fun test_set_min_fill_deadline_ms() {
+    let (scenario, mut fees, cap) = start();
+
+    cap.set_min_fill_deadline_ms(&mut fees, 1_800_000);
+    assert!(fees.min_fill_deadline_ms() == 1_800_000);
+
+    end(scenario, fees, cap);
+}
+
+#[test, expected_failure(abort_code = fees::EMinFillDeadlineTooLow)]
+fun test_set_min_fill_deadline_ms_too_low() {
+    let (scenario, mut fees, cap) = start();
+
+    cap.set_min_fill_deadline_ms(&mut fees, 450_000);
 
     end(scenario, fees, cap);
 }
