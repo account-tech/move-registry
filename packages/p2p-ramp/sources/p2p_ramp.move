@@ -589,11 +589,19 @@ public(package) fun record_successful_trade<CoinType>(
     let coin_type_name = type_name::get<CoinType>();
     rep.successful_trades = rep.successful_trades + 1;
 
-    let current_fiat_vol = rep.total_fiat_volume.get_mut(&fiat_code);
-    *current_fiat_vol = *current_fiat_vol + fiat_amount;
+    if (rep.total_fiat_volume.contains(&fiat_code)) {
+        let current_fiat_vol = rep.total_fiat_volume.get_mut(&fiat_code);
+        *current_fiat_vol = *current_fiat_vol + fiat_amount;
+    } else {
+        rep.total_fiat_volume.insert(fiat_code, fiat_amount);
+    };
 
-    let current_coin_vol = rep.total_coin_volume.get_mut(&coin_type_name);
-    *current_coin_vol = *current_coin_vol + coin_amount;
+    if (rep.total_coin_volume.contains(&coin_type_name)) {
+        let current_coin_vol = rep.total_coin_volume.get_mut(&coin_type_name);
+        *current_coin_vol = *current_coin_vol + coin_amount;
+    } else {
+        rep.total_coin_volume.insert(coin_type_name, coin_amount);
+    };
 
     rep.total_release_time_ms = rep.total_release_time_ms + (release_time_ms as u128);
 }
