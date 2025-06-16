@@ -12,14 +12,18 @@ use p2p_ramp::{
     fees::{Self, Fees},
     version
 };
+use std::type_name::{Self};
 use sui::{
     test_utils::destroy,
     test_scenario::{Self as ts, Scenario},
-    clock::{Self, Clock}
+    clock::{Self, Clock},
+    coin::{Self},
+    sui::SUI,
 };
 
 const OWNER: address = @0xCAFE;
 const ALICE: address = @0xA11CE;
+const DECIMALS: u64 = 1_000_000_000;
 
 fun start(): (Scenario, Extensions, Account<P2PRamp>, Registry, Fees, Clock) {
     let mut scenario = ts::begin(OWNER);
@@ -53,6 +57,97 @@ fun end(scenario: Scenario, extensions: Extensions, account: Account<P2PRamp>, r
     destroy(clock);
     ts::end(scenario);
 }
+
+// account reputation getters tested in next test
+
+#[test]
+fun test_init_reputation() {
+    let (scenario, extensions, account, registry, fees, clock) = start();
+
+    let rep = p2p_ramp::reputation(&account);
+
+    assert!(rep.successful_trades() == 0);
+    assert!(rep.failed_trades() == 0);
+    assert!(rep.total_coin_volume().is_empty());
+    assert!(rep.total_fiat_volume().is_empty());
+    assert!(rep.total_release_time_ms() == 0);
+    assert!(rep.disputes_won() == 0);
+    assert!(rep.disputes_lost() == 0);
+    assert!(rep.avg_release_time_ms() == 0);
+    assert!(rep.completion_rate() == 0);
+
+    end(scenario, extensions, account, registry, fees, clock);
+}
+
+#[test]
+fun test_record_successful_trade() {
+    let (mut scenario, extensions, mut account, registry, fees, clock) = start();
+
+    let coin = coin::mint_for_testing<SUI>(10 * DECIMALS, scenario.ctx());
+    let type_name = type_name::get<SUI>();
+
+    p2p_ramp::record_successful_trade<SUI>(
+        &mut account,
+        b"USD".to_string(),
+        1_000,
+        coin.value(),
+        300_000
+    );
+
+    let rep = p2p_ramp::reputation(&account);
+
+    assert!(rep.successful_trades() == 1);
+    assert!(rep.failed_trades() == 0);
+    assert!(!rep.total_coin_volume().is_empty());
+    assert!(rep.total_coin_volume().get(&type_name) == coin.value());
+    assert!(!rep.total_fiat_volume().is_empty());
+    assert!(rep.total_fiat_volume().get(&b"USD".to_string()) == 1_000);
+    assert!(rep.total_release_time_ms() == 300_000);
+    assert!(rep.disputes_won() == 0);
+    assert!(rep.disputes_lost() == 0);
+    assert!(rep.avg_release_time_ms() == 300_000);
+    assert!(rep.completion_rate() == 100);
+
+    destroy(coin);
+    end(scenario, extensions, account, registry, fees, clock);
+}
+
+#[test]
+fun test_record_failed_trade() {
+    let (scenario, extensions, mut account, registry, fees, clock) = start();
+
+    p2p_ramp::record_failed_trade(&mut account);
+
+    let rep = p2p_ramp::reputation(&account);
+    assert!(rep.failed_trades() == 1);
+
+    end(scenario, extensions, account, registry, fees, clock);
+}
+
+#[test]
+fun test_record_dispute_outcome_won() {
+    let (scenario, extensions, mut account, registry, fees, clock) = start();
+
+    p2p_ramp::record_dispute_outcome(&mut account, OWNER);
+
+    let rep = p2p_ramp::reputation(&account);
+    assert!(rep.disputes_won() == 1);
+
+    end(scenario, extensions, account, registry, fees, clock);
+}
+
+#[test]
+fun test_record_dispute_outcome_lost() {
+    let (scenario, extensions, mut account, registry, fees, clock) = start();
+
+    p2p_ramp::record_dispute_outcome(&mut account, ALICE);
+
+    let rep = p2p_ramp::reputation(&account);
+    assert!(rep.disputes_lost() == 1);
+
+    end(scenario, extensions, account, registry, fees, clock);
+}
+
 
 #[test]
 fun test_join_and_leave() {
