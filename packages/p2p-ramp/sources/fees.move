@@ -182,7 +182,7 @@ public fun assert_fiat_allowed(
     assert!(is_fiat_allowed(fees, fiat_code), EFiatTypeNotWhitelisted)
 }
 
-public fun set_min_fill_deadline(
+public fun set_min_fill_deadline_ms(
     _: &AdminCap,
     fees: &mut Fees,
     new_min_fill_deadline_ms: u64,
