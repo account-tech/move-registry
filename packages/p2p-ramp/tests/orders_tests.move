@@ -1,9 +1,6 @@
 module p2p_ramp::orders_tests;
 
 use account_extensions::extensions::{Self, Extensions, AdminCap};
-use account_protocol::{
-    intents,
-};
 use sui::clock::{Self, Clock};
 use p2p_ramp::p2p_ramp::{Self, Registry};
 use p2p_ramp::fees::{Self, Fees};
@@ -224,15 +221,6 @@ fun test_buy_order_flow() {
     // --- SECTION: ALICE Fills BOB's Buy Order ---
     scenario.next_tx(ALICE);
 
-    let params = intents::new_params(
-        b"fill-buy".to_string(),
-        b"description".to_string(),
-        vector[0],
-        1,
-        &clock,
-        scenario.ctx(),
-    );
-
     let handshake = p2p_ramp::requested_handshake_outcome(
         vector[BOB],
         vector[ALICE]
@@ -241,7 +229,6 @@ fun test_buy_order_flow() {
     let coin = coin::mint_for_testing<SUI>(10 * DECIMALS, scenario.ctx());
 
     orders::request_fill_buy_order<SUI>(
-        params,
         handshake,
         &mut account,
         order_id,
@@ -267,7 +254,7 @@ fun test_buy_order_flow() {
 
     p2p_ramp::flag_as_paid(
         &mut account,
-        b"fill-buy".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx()
     );
@@ -277,7 +264,7 @@ fun test_buy_order_flow() {
 
     p2p_ramp::flag_as_settled(
         &mut account,
-        b"fill-buy".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx()
     );
@@ -287,7 +274,7 @@ fun test_buy_order_flow() {
 
     let executable = p2p_ramp::execute_handshake_intent(
         &mut account,
-        b"fill-buy".to_string(),
+        ALICE.to_string(),
         &clock
     );
 
@@ -340,22 +327,12 @@ fun test_sell_order_flow() {
     // --- SECTION: ALICE Fills the Sell Order ---
     scenario.next_tx(ALICE);
 
-    let params = intents::new_params(
-        b"fill-sell".to_string(),
-        b"description".to_string(),
-        vector[0],
-        1,
-        &clock,
-        scenario.ctx(),
-    );
-
     let handshake = p2p_ramp::requested_handshake_outcome(
         vector[ALICE], // fiat sender
         vector[BOB] // token sender
     );
 
     orders::request_fill_sell_order<SUI>(
-        params,
         handshake,
         &mut account,
         order_id,
@@ -367,7 +344,7 @@ fun test_sell_order_flow() {
     // --- SECTION: ALICE Makes Payment Claim ---
     p2p_ramp::flag_as_paid(
         &mut account,
-        b"fill-sell".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx(),
     );
@@ -377,7 +354,7 @@ fun test_sell_order_flow() {
 
     p2p_ramp::flag_as_settled(
         &mut account,
-        b"fill-sell".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx(),
     );
@@ -387,7 +364,7 @@ fun test_sell_order_flow() {
 
     let executable = p2p_ramp::execute_handshake_intent(
         &mut account,
-        b"fill-sell".to_string(),
+        ALICE.to_string(),
         &clock
     );
 
@@ -497,18 +474,9 @@ fun test_fail_to_overfill_order() {
 
     // --- SECTION: ALICE Successfully Fills a Portion of the Order (70%) ---
     scenario.next_tx(ALICE);
-    let alice_params = intents::new_params(
-        b"alice-fill".to_string(),
-        b"desc".to_string(),
-        vector[0],
-        1,
-        &clock,
-        scenario.ctx()
-    );
     let alice_handshake = p2p_ramp::requested_handshake_outcome(vector[ALICE], vector[BOB]);
 
     orders::request_fill_sell_order<SUI>(
-        alice_params,
         alice_handshake,
         &mut account,
         order_id,
@@ -520,7 +488,7 @@ fun test_fail_to_overfill_order() {
     // Complete Alice's fill to move the amount to `completed_fill`
     p2p_ramp::flag_as_paid(
         &mut account,
-        b"alice-fill".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx()
     );
@@ -528,7 +496,7 @@ fun test_fail_to_overfill_order() {
     scenario.next_tx(BOB);
     p2p_ramp::flag_as_settled(
         &mut account,
-        b"alice-fill".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx()
     );
@@ -536,7 +504,7 @@ fun test_fail_to_overfill_order() {
     scenario.next_tx(CAROL); // Anyone can execute
     let alice_executable = p2p_ramp::execute_handshake_intent(
         &mut account,
-        b"alice-fill".to_string(),
+        ALICE.to_string(),
         &clock
     );
     orders::execute_fill_sell_order<SUI>(
@@ -550,21 +518,12 @@ fun test_fail_to_overfill_order() {
 
     // --- SECTION: CAROL Attempts to Overfill the Order (Expected to Fail) ---
     scenario.next_tx(CAROL);
-    let carol_params = intents::new_params(
-        b"carol-fill".to_string(),
-        b"desc".to_string(),
-        vector[0],
-        1,
-        &clock,
-        scenario.ctx()
-    );
     let carol_handshake = p2p_ramp::requested_handshake_outcome(vector[CAROL], vector[BOB]);
 
     // Carol tries to fill for $4.
     // The check should be: 400(new) + 0 (pending) + 700 (completed) <= 1000
     // This is 1100 <= 1000, which is FALSE. The transaction must abort.
     orders::request_fill_sell_order<SUI>(
-        carol_params,
         carol_handshake,
         &mut account,
         order_id,
@@ -608,20 +567,11 @@ fun test_fail_to_fill_above_max_limit() {
 
     // --- SECTION: ALICE Attempts to Fill Above Max Limit (Expected to Fail) ---
     scenario.next_tx(ALICE);
-    let params = intents::new_params(
-        b"fill-too-high".to_string(),
-        b"desc".to_string(),
-        vector[0],
-        1,
-        &clock,
-        scenario.ctx()
-    );
     let handshake = p2p_ramp::requested_handshake_outcome(vector[ALICE], vector[BOB]);
 
     // Alice tries to fill for 501, which is more than the max_fill of 500.
     // This call must abort.
     orders::request_fill_sell_order<SUI>(
-        params,
         handshake,
         &mut account,
         order_id,
@@ -672,20 +622,11 @@ fun test_dispute_buy_order_taker_wins() {
     scenario.next_tx(ALICE);
     let alice_coin = coin::mint_for_testing<SUI>(5 * DECIMALS, scenario.ctx());
     let alice_coin_value = alice_coin.value();
-    let params = intents::new_params(
-        b"dispute-buy".to_string(),
-        b"desc".to_string(),
-        vector[0],
-        1,
-        &clock,
-        scenario.ctx()
-    );
     let handshake = p2p_ramp::requested_handshake_outcome(
         vector[BOB],
         vector[ALICE]
     );
     orders::request_fill_buy_order<SUI>(
-        params,
         handshake,
         &mut account,
         order_id,
@@ -699,7 +640,7 @@ fun test_dispute_buy_order_taker_wins() {
     scenario.next_tx(BOB);
     p2p_ramp::flag_as_paid(
         &mut account,
-        b"dispute-buy".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx()
     );
@@ -708,7 +649,7 @@ fun test_dispute_buy_order_taker_wins() {
     scenario.next_tx(ALICE);
     p2p_ramp::flag_as_disputed(
         &mut account,
-        b"dispute-buy".to_string(),
+        ALICE.to_string(),
         scenario.ctx()
     );
 
@@ -718,7 +659,7 @@ fun test_dispute_buy_order_taker_wins() {
     let executable = p2p_ramp::resolve_handshake_intent(
         &cap,
         &mut account,
-        b"dispute-buy".to_string(),
+        ALICE.to_string(),
         &clock
     );
     orders::resolve_dispute_buy_order<SUI>(
@@ -787,18 +728,9 @@ fun test_dispute_sell_order_merchant_wins() {
     // --- SECTION: ALICE Requests Fill, Claims Payment, BOB Disputes ---
     scenario.next_tx(ALICE);
 
-    let params = intents::new_params(
-        b"dispute-sell".to_string(),
-        b"desc".to_string(),
-        vector[0], 1,
-        &clock,
-        scenario.ctx()
-    );
-
     let handshake = p2p_ramp::requested_handshake_outcome(vector[ALICE], vector[BOB]);
 
     orders::request_fill_sell_order<SUI>(
-        params,
         handshake,
         &mut account,
         order_id,
@@ -810,7 +742,7 @@ fun test_dispute_sell_order_merchant_wins() {
     // Alice claims she paid
     p2p_ramp::flag_as_paid(
         &mut account,
-        b"dispute-sell".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx()
     );
@@ -819,7 +751,7 @@ fun test_dispute_sell_order_merchant_wins() {
     scenario.next_tx(BOB);
     p2p_ramp::flag_as_disputed(
         &mut account,
-        b"dispute-sell".to_string(),
+        ALICE.to_string(),
         scenario.ctx()
     );
 
@@ -828,7 +760,7 @@ fun test_dispute_sell_order_merchant_wins() {
     let executable = p2p_ramp::resolve_handshake_intent(
         &cap,
         &mut account,
-        b"dispute-sell".to_string(),
+        ALICE.to_string(),
         &clock
     );
     let bob_addr = account.addr();
@@ -892,19 +824,9 @@ fun test_merchant_cancels_buy_order_fill() {
     let alice_coin = coin::mint_for_testing<SUI>(5 * DECIMALS, scenario.ctx());
     let alice_coin_value = alice_coin.value();
 
-    let params = intents::new_params(
-        b"merchant-cancel".to_string(),
-        b"desc".to_string(),
-        vector[0],
-        1,
-        &clock,
-        scenario.ctx()
-    );
-
     let handshake = p2p_ramp::requested_handshake_outcome(vector[BOB], vector[ALICE]);
 
     orders::request_fill_buy_order<SUI>(
-        params,
         handshake,
         &mut account,
         order_id,
@@ -917,7 +839,7 @@ fun test_merchant_cancels_buy_order_fill() {
     scenario.next_tx(BOB);
     let executable = p2p_ramp::execute_merchant_cancellation_intent(
         &mut account,
-        b"merchant-cancel".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx()
     );
@@ -977,18 +899,9 @@ fun test_fill_request_expires() {
     let alice_coin = coin::mint_for_testing<SUI>(5 * DECIMALS, scenario.ctx());
     let alice_coin_value = alice_coin.value();
 
-    let params = intents::new_params(
-        b"expired-fill".to_string(),
-        b"desc".to_string(),
-        vector[0], 1,
-        &clock,
-        scenario.ctx()
-    );
-
     let handshake = p2p_ramp::requested_handshake_outcome(vector[BOB], vector[ALICE]);
 
     orders::request_fill_buy_order<SUI>(
-        params,
         handshake,
         &mut account,
         order_id,
@@ -1005,7 +918,7 @@ fun test_fill_request_expires() {
     scenario.next_tx(CAROL);
     let executable = p2p_ramp::resolve_handshake_intent_expired_fill(
         &mut account,
-        b"expired-fill".to_string(),
+        ALICE.to_string(),
         &clock
     );
 
@@ -1073,14 +986,6 @@ fun test_destroy_partially_filled_order() {
     let expected_remaining_balance_sui = 6 * DECIMALS; // 10 SUI - 4 SUI = 6 SUI
 
     scenario.next_tx(ALICE);
-    let alice_params = intents::new_params(
-        b"partial-fill".to_string(),
-        b"desc".to_string(),
-        vector[0],
-        1,
-        &clock,
-        scenario.ctx()
-    );
 
     let alice_handshake = p2p_ramp::requested_handshake_outcome(
         vector[ALICE],
@@ -1088,7 +993,6 @@ fun test_destroy_partially_filled_order() {
     );
 
     orders::request_fill_sell_order<SUI>(
-        alice_params,
         alice_handshake,
         &mut account,
         order_id,
@@ -1100,7 +1004,7 @@ fun test_destroy_partially_filled_order() {
     // Complete the fill process
     p2p_ramp::flag_as_paid(
         &mut account,
-        b"partial-fill".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx()
     );
@@ -1109,7 +1013,7 @@ fun test_destroy_partially_filled_order() {
 
     p2p_ramp::flag_as_settled(
         &mut account,
-        b"partial-fill".to_string(),
+        ALICE.to_string(),
         &clock,
         scenario.ctx()
     );
@@ -1118,7 +1022,7 @@ fun test_destroy_partially_filled_order() {
 
     let alice_executable = p2p_ramp::execute_handshake_intent(
         &mut account,
-        b"partial-fill".to_string(),
+        ALICE.to_string(),
         &clock
     );
 
@@ -1194,13 +1098,6 @@ fun test_fail_to_destroy_order_with_pending_fill() {
 
     // --- SECTION: ALICE Requests a Fill (Creates Pending Fill) ---
     scenario.next_tx(ALICE);
-    let alice_params = intents::new_params(
-        b"pending-fill".to_string(),
-        b"desc".to_string(),
-        vector[0], 1,
-        &clock,
-        scenario.ctx()
-    );
 
     let alice_handshake = p2p_ramp::requested_handshake_outcome(
         vector[ALICE],
@@ -1208,7 +1105,6 @@ fun test_fail_to_destroy_order_with_pending_fill() {
     );
 
     orders::request_fill_sell_order<SUI>(
-        alice_params,
         alice_handshake,
         &mut account,
         order_id,

@@ -13,7 +13,6 @@ use sui::{
 use account_protocol::{
     account::{Self, Account, Auth},
     executable::Executable,
-    intents::Params,
     intent_interface,
     intents::{Self},
 };
@@ -250,7 +249,6 @@ public fun get_order<CoinType>(
 
 /// Customer deposits coin to get fiat
 public fun request_fill_buy_order<CoinType>(
-    params: Params,
     mut outcome: Handshake,
     account: &mut Account<P2PRamp>,
     order_id: address,
@@ -281,6 +279,15 @@ public fun request_fill_buy_order<CoinType>(
         fill_deadline_ms: correct_deadline,
     });
 
+    let params = intents::new_params(
+        ctx.sender().to_string(),
+        b"".to_string(),
+        vector[0],
+        clock.timestamp_ms() + (7 * 24 * 60 * 60 * 1000),
+        clock,
+        ctx,
+    );
+
     account.build_intent!(
         params,
         outcome,
@@ -294,7 +301,6 @@ public fun request_fill_buy_order<CoinType>(
 
 /// Customer requests to get coins by paying with fiat
 public fun request_fill_sell_order<CoinType>(
-    params: Params,
     mut outcome: Handshake,
     account: &mut Account<P2PRamp>,
     order_id: address,
@@ -324,6 +330,15 @@ public fun request_fill_sell_order<CoinType>(
         taker: ctx.sender(),
         fill_deadline_ms:correct_deadline,
     });
+
+    let params = intents::new_params(
+        ctx.sender().to_string(),
+        b"".to_string(),
+        vector[0],
+        clock.timestamp_ms() + (7 * 24 * 60 * 60 * 1000),
+        clock,
+        ctx,
+    );
 
     account.build_intent!(
         params,
