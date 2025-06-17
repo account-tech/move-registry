@@ -368,9 +368,7 @@ public fun flag_as_disputed(
         version::current(),
         ConfigWitness(),
         |outcome| {
-            assert!(
-                (outcome.status == Status::Requested ||
-                outcome.status == Status::Paid) &&
+            assert!(outcome.status == Status::Paid &&
                 (outcome.coin_senders.contains(&sender) ||
                 outcome.fiat_senders.contains(&sender)),
                 ECannotDispute
