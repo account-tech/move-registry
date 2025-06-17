@@ -144,6 +144,8 @@ public struct Order<phantom CoinType> has store {
     coin_balance: Balance<CoinType>,
     // amount being filled
     pending_fill: u64,
+    // amount already successfully filled
+    completed_fill: u64,
 }
 
 public enum CancellationKind has copy, drop {
@@ -168,8 +170,8 @@ public fun create_order<CoinType>(
     fill_deadline_ms: u64,
     coin_balance: Balance<CoinType>, // 0 if buy
     ctx: &mut TxContext,
-) {
-    if (is_buy) assert!(coin_balance.value() == 0, EWrongValue);
+) : address {
+    if (is_buy) assert!(coin_balance.value() == 0, EWrongValue) else assert!(coin_balance.value() > 0, EWrongValue);
     account.verify(auth);
     // Only whitelisted currency are allowed for orders
     fees.assert_fiat_allowed(fiat_code);
@@ -189,6 +191,7 @@ public fun create_order<CoinType>(
         fill_deadline_ms,
         coin_balance,
         pending_fill: 0,
+        completed_fill: 0,
     };
 
     event::emit(CreateOrderEvent {
@@ -207,6 +210,8 @@ public fun create_order<CoinType>(
         order,
         version::current()
     );
+
+    order_id
 }
 
 #[allow(lint(self_transfer))]
@@ -354,6 +359,7 @@ public fun execute_fill_buy_order<CoinType>(
 
     let order = get_order_mut<CoinType>(account, order_id);
     order.pending_fill = order.pending_fill - coin.value();
+    order.completed_fill = order.completed_fill + coin.value();
 
     let fiat_amount = get_price_ratio<CoinType>(order) * coin.value() / MUL;
     let coin_amount = coin.value();
@@ -398,6 +404,7 @@ public fun execute_fill_sell_order<CoinType>(
 
     let order = get_order_mut<CoinType>(account, order_id);
     order.pending_fill = order.pending_fill - amount;
+    order.completed_fill = order.completed_fill + amount;
 
     let coin_for_fiat = order.get_price_ratio() * amount / MUL;
     let mut coin = order.coin_balance.split(coin_for_fiat).into_coin(ctx);
@@ -672,6 +679,68 @@ public fun taker_cancel_sell_order_fill<CoinType>(
     expired.destroy_empty();
 }
 
+// === View functions ===
+
+public fun is_buy<CoinType>(
+    order: &Order<CoinType>
+) : bool {
+    order.is_buy
+}
+
+public fun min_fill<CoinType>(
+    order: &Order<CoinType>
+) : u64 {
+    order.min_fill
+}
+
+public fun max_fill<CoinType>(
+    order: &Order<CoinType>
+) : u64 {
+    order.max_fill
+}
+
+public fun fiat_amount<CoinType>(
+    order: &Order<CoinType>
+) : u64 {
+    order.fiat_amount
+}
+
+public fun fiat_code<CoinType>(
+    order: &Order<CoinType>
+) : String {
+    order.fiat_code
+}
+
+public fun coin_amount<CoinType>(
+    order: &Order<CoinType>
+) : u64 {
+    order.coin_amount
+}
+
+public fun fill_deadline_ms<CoinType>(
+    order: &Order<CoinType>
+) : u64 {
+    order.fill_deadline_ms
+}
+
+public fun coin_balance<CoinType>(
+    order: &Order<CoinType>
+) : u64 {
+    order.coin_balance.value()
+}
+
+public fun pending_fill<CoinType>(
+    order: &Order<CoinType>
+) : u64 {
+    order.pending_fill
+}
+
+public fun completed_fill<CoinType>(
+    order: &Order<CoinType>
+) : u64 {
+    order.completed_fill
+}
+
 // === Private functions ===
 
 fun get_order_mut<CoinType>(
@@ -695,15 +764,18 @@ fun assert_can_be_filled<CoinType>(order: &Order<CoinType>, amount: u64) {
         EFillOutOfRange
     );
 
+    let total_committed = order.pending_fill + order.completed_fill;
+
     assert!(
         if (order.is_buy) {
-            amount + order.pending_fill <= order.coin_amount
+            amount + total_committed <= order.coin_amount
         } else {
-            amount + order.pending_fill <= order.fiat_amount
+            amount + total_committed <= order.fiat_amount
         },
         EFillOutOfRange
     );
 }
+
 
 macro fun contains_any<$K: copy + drop>($a: &vec_set::VecSet<$K>, $b: &vec_set::VecSet<$K>): bool {
     let keys_b = vec_set::keys($b);
