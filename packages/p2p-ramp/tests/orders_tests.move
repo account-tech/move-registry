@@ -3,7 +3,7 @@ module p2p_ramp::orders_tests;
 use account_extensions::extensions::{Self, Extensions, AdminCap};
 use sui::clock::{Self, Clock};
 use p2p_ramp::p2p_ramp::{Self, Registry};
-use p2p_ramp::fees::{Self, Fees};
+use p2p_ramp::policy::{Self, Policy};
 use p2p_ramp::orders::{Self};
 use sui::{
     test_utils::destroy,
@@ -23,17 +23,17 @@ const DECIMALS: u64 = 1_000_000_000;
 
 // === Helper functions ===
 
-fun start() : (Scenario, Extensions, Registry, Fees, Clock, fees::AdminCap) {
+fun start() : (Scenario, Extensions, Registry, Policy, Clock, policy::AdminCap) {
     let mut scenario = ts::begin(OWNER);
     // publish package
     p2p_ramp::init_for_testing(scenario.ctx());
     extensions::init_for_testing(scenario.ctx());
-    fees::init_for_testing(scenario.ctx());
+    policy::init_for_testing(scenario.ctx());
     // retrieve objs
     scenario.next_tx(OWNER);
-    let mut fees = scenario.take_shared<Fees>();
+    let mut policy = scenario.take_shared<Policy>();
     let cap = scenario.take_from_sender<AdminCap>();
-    let ramp_cap = scenario.take_from_sender<fees::AdminCap>();
+    let ramp_cap = scenario.take_from_sender<policy::AdminCap>();
     let registry = scenario.take_shared<Registry>();
     let mut extensions = scenario.take_shared<Extensions>();
 
@@ -42,20 +42,20 @@ fun start() : (Scenario, Extensions, Registry, Fees, Clock, fees::AdminCap) {
     extensions.add(&cap, b"P2PRamp".to_string(), @p2p_ramp, 1);
 
     // set allowed coin types and allowed fiat
-    ramp_cap.allow_coin<SUI>(&mut fees);
-    ramp_cap.allow_fiat(&mut fees, b"USD".to_string());
+    ramp_cap.allow_coin<SUI>(&mut policy);
+    ramp_cap.allow_fiat(&mut policy, b"USD".to_string());
 
     let clock = clock::create_for_testing(scenario.ctx());
 
     destroy(cap);
 
-    (scenario, extensions, registry, fees, clock, ramp_cap)
+    (scenario, extensions, registry, policy, clock, ramp_cap)
 }
 
-fun end(scenario: Scenario, extensions: Extensions, registry: Registry, fees: Fees, clock: Clock, cap: fees::AdminCap) {
+fun end(scenario: Scenario, extensions: Extensions, registry: Registry, policy: Policy, clock: Clock, cap: policy::AdminCap) {
     destroy(extensions);
     destroy(registry);
-    destroy(fees);
+    destroy(policy);
     destroy(clock);
     destroy(cap);
     ts::end(scenario);
@@ -64,7 +64,7 @@ fun end(scenario: Scenario, extensions: Extensions, registry: Registry, fees: Fe
 
 #[test]
 fun test_create_buy_order() {
-    let (mut scenario, extensions, mut registry, fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, policy, clock, cap) = start();
 
     // --- SECTION: BOB Creates Merchant Account and Buy Order ---
     scenario.next_tx(BOB);
@@ -83,7 +83,7 @@ fun test_create_buy_order() {
     // BOB posts a buy order
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         true,
         1_000, // 10.00 USD
@@ -119,12 +119,12 @@ fun test_create_buy_order() {
 
     destroy(account);
 
-    end(scenario, extensions, registry, fees, clock, cap)
+    end(scenario, extensions, registry, policy, clock, cap)
 }
 
 #[test, expected_failure(abort_code = orders::EWrongValue)]
 fun test_create_order_buy_with_balance() {
-    let (mut scenario, extensions, mut registry, fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, policy, clock, cap) = start();
 
     // --- SECTION: BOB Creates Merchant Account ---
     scenario.next_tx(BOB);
@@ -138,7 +138,7 @@ fun test_create_order_buy_with_balance() {
     // --- SECTION: Attempt to Create Buy Order with Balance (Expected to Fail) ---
     orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         true,
         1_000, // 10.00 USD
@@ -154,12 +154,12 @@ fun test_create_order_buy_with_balance() {
     
     destroy(account);
 
-    end(scenario, extensions, registry, fees, clock, cap)
+    end(scenario, extensions, registry, policy, clock, cap)
 }
 
 #[test, expected_failure(abort_code = orders::EWrongValue)]
 fun test_create_order_sell_with_zero_balance() {
-    let (mut scenario, extensions, mut registry, fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, policy, clock, cap) = start();
 
     // --- SECTION: BOB Creates Merchant Account ---
     scenario.next_tx(BOB);
@@ -171,7 +171,7 @@ fun test_create_order_sell_with_zero_balance() {
     // --- SECTION: Attempt to Create Sell Order with Zero Balance (Expected to Fail) ---
     orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         false,
         1_000, // 10.00 USD
@@ -187,13 +187,13 @@ fun test_create_order_sell_with_zero_balance() {
     
     destroy(account);
 
-    end(scenario, extensions, registry, fees, clock, cap)
+    end(scenario, extensions, registry, policy, clock, cap)
 }
 
 // BOB (merchant) buys from ALICE (customer)
 #[test]
 fun test_buy_order_flow() {
-    let (mut scenario, extensions, mut registry, mut fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, mut policy, clock, cap) = start();
 
     // --- SECTION: BOB Creates Merchant Account and Buy Order ---
     scenario.next_tx(BOB);
@@ -205,7 +205,7 @@ fun test_buy_order_flow() {
     // BOB posts a buy order
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         true,
         1_000, // 10.00 USD
@@ -281,7 +281,7 @@ fun test_buy_order_flow() {
     orders::execute_fill_buy_order<SUI>(
         executable,
         &mut account,
-        &mut fees,
+        &mut policy,
         scenario.ctx()
     );
 
@@ -292,12 +292,12 @@ fun test_buy_order_flow() {
    
     destroy(account);
 
-    end(scenario, extensions, registry, fees, clock, cap)
+    end(scenario, extensions, registry, policy, clock, cap)
 }
 
 #[test]
 fun test_sell_order_flow() {
-    let (mut scenario, extensions, mut registry, mut fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, mut policy, clock, cap) = start();
 
     // --- SECTION: BOB Creates Merchant Account and Sell Order ---
     scenario.next_tx(BOB);
@@ -311,7 +311,7 @@ fun test_sell_order_flow() {
 
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         false,
         1_000, // 10 USD
@@ -371,7 +371,7 @@ fun test_sell_order_flow() {
     orders::execute_fill_sell_order<SUI>(
         executable,
         &mut account,
-        &mut fees,
+        &mut policy,
         scenario.ctx()
     );
 
@@ -388,12 +388,12 @@ fun test_sell_order_flow() {
     destroy(account);
     destroy(coin);
 
-    end(scenario, extensions, registry, fees, clock, cap)
+    end(scenario, extensions, registry, policy, clock, cap)
 }
 
 #[test]
 fun test_create_sell_order() {
-    let (mut scenario, extensions, mut registry, fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, policy, clock, cap) = start();
 
     // --- SECTION: BOB Creates Merchant Account and Sell Order ---
     scenario.next_tx(BOB);
@@ -410,7 +410,7 @@ fun test_create_sell_order() {
 
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         false,
         1_000, // 10.00 USD
@@ -442,12 +442,12 @@ fun test_create_sell_order() {
 
     destroy(account);
 
-    end(scenario, extensions, registry, fees, clock, cap)
+    end(scenario, extensions, registry, policy, clock, cap)
 }
 
 #[test, expected_failure(abort_code = orders::EFillOutOfRange)]
 fun test_fail_to_overfill_order() {
-    let (mut scenario, extensions, mut registry, mut fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, mut policy, clock, cap) = start();
 
     // --- SECTION: BOB Creates Merchant Account and Sell Order ---
     scenario.next_tx(BOB);
@@ -459,7 +459,7 @@ fun test_fail_to_overfill_order() {
     let coin = coin::mint_for_testing<SUI>(10 * DECIMALS, scenario.ctx());
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         false, // is_buy = false
         1_000,  // Total fiat_amount capacity
@@ -510,7 +510,7 @@ fun test_fail_to_overfill_order() {
     orders::execute_fill_sell_order<SUI>(
         alice_executable,
         &mut account,
-        &mut fees,
+        &mut policy,
         scenario.ctx()
     );
 
@@ -535,12 +535,12 @@ fun test_fail_to_overfill_order() {
     // The test expects an abort, so it will not reach the end.
     
     destroy(account);
-    end(scenario, extensions, registry, fees, clock, cap);
+    end(scenario, extensions, registry, policy, clock, cap);
 }
 
 #[test, expected_failure(abort_code = orders::EFillOutOfRange)]
 fun test_fail_to_fill_above_max_limit() {
-    let (mut scenario, extensions, mut registry, fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, policy, clock, cap) = start();
 
     // --- SECTION: BOB Creates Merchant Account and Sell Order ---
     scenario.next_tx(BOB);
@@ -552,7 +552,7 @@ fun test_fail_to_fill_above_max_limit() {
     let coin = coin::mint_for_testing<SUI>(10 * DECIMALS, scenario.ctx());
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         false, // is_buy = false
         1000, // $10
@@ -583,12 +583,12 @@ fun test_fail_to_fill_above_max_limit() {
     
     destroy(account);
 
-    end(scenario, extensions, registry, fees, clock, cap);
+    end(scenario, extensions, registry, policy, clock, cap);
 }
 
 #[test]
 fun test_dispute_buy_order_taker_wins() {
-    let (mut scenario, extensions, mut registry, mut fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, mut policy, clock, cap) = start();
 
     // --- SECTION: Order Creation ---
     // BOB creates merchant account and places a buy order
@@ -604,7 +604,7 @@ fun test_dispute_buy_order_taker_wins() {
     );
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         true,
         1000,
@@ -666,7 +666,7 @@ fun test_dispute_buy_order_taker_wins() {
         &cap,
         executable,
         &mut account,
-        &mut fees,
+        &mut policy,
         ALICE,
         scenario.ctx()
     );
@@ -688,12 +688,12 @@ fun test_dispute_buy_order_taker_wins() {
     destroy(account);
     destroy(coin);
 
-    end(scenario, extensions, registry, fees, clock, cap);
+    end(scenario, extensions, registry, policy, clock, cap);
 }
 
 #[test]
 fun test_dispute_sell_order_merchant_wins() {
-    let (mut scenario, extensions, mut registry, mut fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, mut policy, clock, cap) = start();
 
     // --- SECTION: BOB Creates Merchant Account and Sell Order ---
     scenario.next_tx(BOB);
@@ -712,7 +712,7 @@ fun test_dispute_sell_order_merchant_wins() {
 
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         false,
         1000,
@@ -768,7 +768,7 @@ fun test_dispute_sell_order_merchant_wins() {
         &cap,
         executable,
         &mut account,
-        &mut fees,
+        &mut policy,
         bob_addr,
         scenario.ctx()
     );
@@ -784,13 +784,13 @@ fun test_dispute_sell_order_merchant_wins() {
     assert!(order.completed_fill() == 0);
 
     destroy(account);
-    end(scenario, extensions, registry, fees, clock, cap);
+    end(scenario, extensions, registry, policy, clock, cap);
 }
 
 #[test]
 fun test_merchant_cancels_buy_order_fill() {
     
-    let (mut scenario, extensions, mut registry, fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, policy, clock, cap) = start();
 
     // --- SECTION: BOB (Merchant) Creates a Buy Order ---
     scenario.next_tx(BOB);
@@ -806,7 +806,7 @@ fun test_merchant_cancels_buy_order_fill() {
 
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         true,
         1000,
@@ -866,12 +866,12 @@ fun test_merchant_cancels_buy_order_fill() {
     assert!(order.pending_fill() == 0);
 
     destroy(account);
-    end(scenario, extensions, registry, fees, clock, cap);
+    end(scenario, extensions, registry, policy, clock, cap);
 }
 
 #[test]
 fun test_fill_request_expires() {
-    let (mut scenario, extensions, mut registry, fees, mut clock, cap) = start();
+    let (mut scenario, extensions, mut registry, policy, mut clock, cap) = start();
 
     // --- SECTION: BOB (Merchant) Creates a Buy Order with Deadline ---
     scenario.next_tx(BOB);
@@ -881,7 +881,7 @@ fun test_fill_request_expires() {
 
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         true,
         1000,
@@ -944,12 +944,12 @@ fun test_fill_request_expires() {
 
     destroy(account);
 
-    end(scenario, extensions, registry, fees, clock, cap);
+    end(scenario, extensions, registry, policy, clock, cap);
 }
 
 #[test]
 fun test_destroy_partially_filled_order() {
-    let (mut scenario, extensions, mut registry, mut fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, mut policy, clock, cap) = start();
 
     // --- SECTION: BOB (Merchant) Creates a Sell Order ---
     scenario.next_tx(BOB);
@@ -966,7 +966,7 @@ fun test_destroy_partially_filled_order() {
 
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         false, // is_buy = false
         1000,
@@ -1029,7 +1029,7 @@ fun test_destroy_partially_filled_order() {
     orders::execute_fill_sell_order<SUI>(
         alice_executable,
         &mut account,
-        &mut fees,
+        &mut policy,
         scenario.ctx()
     );
 
@@ -1061,13 +1061,13 @@ fun test_destroy_partially_filled_order() {
     destroy(bob_final_coin);
     destroy(account);
 
-    end(scenario, extensions, registry, fees, clock, cap);
+    end(scenario, extensions, registry, policy, clock, cap);
 }
 
 #[test, expected_failure(abort_code = orders::ECannotDestroyOrder)]
 fun test_fail_to_destroy_order_with_pending_fill() {
     
-    let (mut scenario, extensions, mut registry, fees, clock, cap) = start();
+    let (mut scenario, extensions, mut registry, policy, clock, cap) = start();
 
     // --- SECTION: BOB (Merchant) Creates a Sell Order ---
     scenario.next_tx(BOB);
@@ -1083,7 +1083,7 @@ fun test_fail_to_destroy_order_with_pending_fill() {
 
     let order_id = orders::create_order<SUI>(
         auth,
-        &fees,
+        &policy,
         &mut account,
         false, // is_buy = false
         1000,
@@ -1133,5 +1133,5 @@ fun test_fail_to_destroy_order_with_pending_fill() {
     
     destroy(account);
 
-    end(scenario, extensions, registry, fees, clock, cap);
+    end(scenario, extensions, registry, policy, clock, cap);
 }

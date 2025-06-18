@@ -19,7 +19,7 @@ use account_protocol::{
 
 use p2p_ramp::{
     p2p_ramp::{Self, P2PRamp, Handshake},
-    fees::{Fees, AdminCap},
+    policy::{Policy, AdminCap},
     version,
 };
 
@@ -158,7 +158,7 @@ public enum CancellationKind has copy, drop {
 /// Merchant creates an order
 public fun create_order<CoinType>(
     auth: Auth,
-    fees: &Fees,
+    policy: &Policy,
     account: &mut Account<P2PRamp>,
     is_buy: bool,
     fiat_amount: u64,
@@ -173,11 +173,11 @@ public fun create_order<CoinType>(
     if (is_buy) assert!(coin_balance.value() == 0, EWrongValue) else assert!(coin_balance.value() > 0, EWrongValue);
     account.verify(auth);
     // Only whitelisted currency are allowed for orders
-    fees.assert_fiat_allowed(fiat_code);
-    fees.assert_coin_allowed<CoinType>();
+    policy.assert_fiat_allowed(fiat_code);
+    policy.assert_coin_allowed<CoinType>();
 
     // the minimum deadline must be 15 mins
-    assert!(fill_deadline_ms >= fees.min_fill_deadline_ms(), EDeadlineTooShort);
+    assert!(fill_deadline_ms >= policy.min_fill_deadline_ms(), EDeadlineTooShort);
 
     let order_id = ctx.fresh_object_address();
     let order = Order<CoinType> {
@@ -354,7 +354,7 @@ public fun request_fill_sell_order<CoinType>(
 public fun execute_fill_buy_order<CoinType>(
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
-    fees: &mut Fees,
+    policy: &mut Policy,
     ctx: &mut TxContext,
 ) {
     account.process_intent!<_, Handshake, _>(
@@ -380,7 +380,7 @@ public fun execute_fill_buy_order<CoinType>(
     let coin_amount = coin.value();
     let release_time = settled_time - paid_time;
 
-    fees.collect(&mut coin, ctx);
+    policy.collect(&mut coin, ctx);
     order.coin_balance.join(coin.into_balance());
 
     event::emit(FillCompletedEvent {
@@ -399,7 +399,7 @@ public fun execute_fill_buy_order<CoinType>(
 public fun execute_fill_sell_order<CoinType>(
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
-    fees: &mut Fees,
+    policy: &mut Policy,
     ctx: &mut TxContext,
 ) {
     account.process_intent!<_, Handshake, _>(
@@ -427,7 +427,7 @@ public fun execute_fill_sell_order<CoinType>(
     let coin_amount = coin.value();
     let release_time = settled_time - paid_time;
 
-    fees.collect(&mut coin, ctx);
+    policy.collect(&mut coin, ctx);
     transfer::public_transfer(coin, taker);
 
     event::emit(FillCompletedEvent {
@@ -447,7 +447,7 @@ public fun resolve_dispute_buy_order<CoinType>(
     _: &AdminCap,
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
-    fees: &mut Fees,
+    policy: &mut Policy,
     recipient: address,
     ctx: &mut TxContext,
 ) {
@@ -466,7 +466,7 @@ public fun resolve_dispute_buy_order<CoinType>(
     let order = get_order_mut<CoinType>(account, order_id);
     order.pending_fill = order.pending_fill - coin.value();
 
-    fees.collect(&mut coin, ctx);
+    policy.collect(&mut coin, ctx);
 
     let (winner, losser) = if (taker == recipient) {
         transfer::public_transfer(coin, recipient);
@@ -493,7 +493,7 @@ public fun resolve_dispute_sell_order<CoinType>(
     _: &AdminCap,
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
-    fees: &mut Fees,
+    policy: &mut Policy,
     recipient: address,
     ctx: &mut TxContext,
 ) {
@@ -515,7 +515,7 @@ public fun resolve_dispute_sell_order<CoinType>(
     let coin_for_fiat = order.get_price_ratio() * amount / MUL;
     let mut coin = order.coin_balance.split(coin_for_fiat).into_coin(ctx);
 
-    fees.collect(&mut coin, ctx);
+    policy.collect(&mut coin, ctx);
 
     let (winner, losser) = if (taker == recipient) {
         transfer::public_transfer(coin, recipient);

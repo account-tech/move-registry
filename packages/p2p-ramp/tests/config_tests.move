@@ -15,7 +15,7 @@ use account_protocol::{
 };
 use p2p_ramp::{
     p2p_ramp::{Self, Registry, P2PRamp, Approved},
-    fees::{Self, Fees},
+    policy::{Self, Policy},
     config
 };
 
@@ -25,18 +25,18 @@ const OWNER: address = @0xCAFE;
 
 // === Helpers ===
 
-fun start(): (Scenario, Extensions, Account<P2PRamp>, Registry, Fees, Clock) {
+fun start(): (Scenario, Extensions, Account<P2PRamp>, Registry, Policy, Clock) {
     let mut scenario = ts::begin(OWNER);
     // publish package
     p2p_ramp::init_for_testing(scenario.ctx());
     extensions::init_for_testing(scenario.ctx());
-    fees::init_for_testing(scenario.ctx());
+    policy::init_for_testing(scenario.ctx());
     //retrieve objs
     scenario.next_tx(OWNER);
     let mut extensions = scenario.take_shared<Extensions>();
     let cap = scenario.take_from_sender<AdminCap>();
     let mut registry = scenario.take_shared<Registry>();
-    let fees = scenario.take_shared<Fees>();
+    let policy = scenario.take_shared<Policy>();
     //add core deps
     extensions.add(&cap, b"AccountProtocol".to_string(), @account_protocol, 1);
     extensions.add(&cap, b"P2PRamp".to_string(), @p2p_ramp, 1);
@@ -46,14 +46,14 @@ fun start(): (Scenario, Extensions, Account<P2PRamp>, Registry, Fees, Clock) {
 
     destroy(cap);
 
-    (scenario, extensions, account, registry, fees, clock)
+    (scenario, extensions, account, registry, policy, clock)
 }
 
-fun end(scenario: Scenario, extensions: Extensions, account: Account<P2PRamp>, registry: Registry, fees: Fees, clock: Clock) {
+fun end(scenario: Scenario, extensions: Extensions, account: Account<P2PRamp>, registry: Registry, policy: Policy, clock: Clock) {
     destroy(extensions);
     destroy(account);
     destroy(registry);
-    destroy(fees);
+    destroy(policy);
     destroy(clock);
     ts::end(scenario);
 }
@@ -62,7 +62,7 @@ fun end(scenario: Scenario, extensions: Extensions, account: Account<P2PRamp>, r
 
 #[test]
 fun test_config_p2p_ramp() {
-    let (mut scenario, extensions, mut account, registry, fees, clock) = start();
+    let (mut scenario, extensions, mut account, registry, policy, clock) = start();
     let auth = p2p_ramp::authenticate(&account, scenario.ctx());
 
     let params = intents::new_params(
@@ -98,12 +98,12 @@ fun test_config_p2p_ramp() {
     assert!(account.config().members().contains(&exact_owner));
     assert!(account.config().members().contains(&@0xFEE));
 
-    end(scenario, extensions, account, registry, fees, clock);
+    end(scenario, extensions, account, registry, policy, clock);
 }
 
 #[test]
 fun test_config_p2p_ramp_deletion() {
-    let (mut scenario, extensions, mut account, registry, fees, mut clock) = start();
+    let (mut scenario, extensions, mut account, registry, policy, mut clock) = start();
     clock.increment_for_testing(1);
     let auth = p2p_ramp::authenticate(&account, scenario.ctx());
 
@@ -135,5 +135,5 @@ fun test_config_p2p_ramp_deletion() {
     config::delete_config_p2p_ramp(&mut expired);
     expired.destroy_empty();
 
-    end(scenario, extensions, account, registry, fees, clock);
+    end(scenario, extensions, account, registry, policy, clock);
 }

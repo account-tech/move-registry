@@ -1,4 +1,4 @@
-module p2p_ramp::fees;
+module p2p_ramp::policy;
 
 // === Imports ===
 
@@ -14,7 +14,7 @@ use sui::{
 
 const ERecipientAlreadyExists: u64 = 0;
 const ERecipientDoesNotExist: u64 = 1;
-const ETotalFeesTooHigh: u64 = 2;
+const ETotalPolicyTooHigh: u64 = 2;
 const ECoinTypeNotWhitelisted: u64 = 3;
 const EFiatTypeNotWhitelisted: u64 = 4;
 const EMinFillDeadlineTooLow: u64 = 5;
@@ -26,9 +26,9 @@ const MIN_FILL_DEADLINE_MS: u64 = 900_000;
 
 // === Structs ===
 
-public struct Fees has key {
+public struct Policy has key {
     id: UID,
-    // Map of addresses to their fees in bps
+    // Map of addresses to their policy in bps
     collectors: VecMap<address, u64>,
     // Set of allowed coin typestep vov
     allowed_coins: VecSet<TypeName>,
@@ -45,7 +45,7 @@ public struct AdminCap has key, store {
 // === Public Functions ===
 
 fun init(ctx: &mut TxContext) {
-    transfer::share_object(Fees {
+    transfer::share_object(Policy {
         id: object::new(ctx),
         collectors: vec_map::empty(),
         allowed_coins: vec_set::empty(),
@@ -61,34 +61,34 @@ fun init(ctx: &mut TxContext) {
 
 // === View Functions ===
 
-public fun collectors(fees: &Fees): VecMap<address, u64> {
-    fees.collectors
+public fun collectors(policy: &Policy): VecMap<address, u64> {
+    policy.collectors
 }
 
-public fun allowed_coins(fees: &Fees): VecSet<TypeName> {
-    fees.allowed_coins
+public fun allowed_coins(policy: &Policy): VecSet<TypeName> {
+    policy.allowed_coins
 }
 
-public fun allowed_fiat(fees: &Fees): VecSet<String> {
-    fees.allowed_fiat
+public fun allowed_fiat(policy: &Policy): VecSet<String> {
+    policy.allowed_fiat
 }
 
-public fun min_fill_deadline_ms(fees: &Fees): u64 {
-    fees.min_fill_deadline_ms
+public fun min_fill_deadline_ms(policy: &Policy): u64 {
+    policy.min_fill_deadline_ms
 }
 
 // === Package Functions ===
 
 public(package) fun collect<CoinType>(
-    fees: &Fees,
+    policy: &Policy,
     coin: &mut Coin<CoinType>,
     ctx: &mut TxContext
 ) {
     let total_amount = coin.value();
-    let mut fees = fees.collectors;
+    let mut policy = policy.collectors;
 
-    while (!fees.is_empty()) {
-        let (recipient, bps) = fees.pop();
+    while (!policy.is_empty()) {
+        let (recipient, bps) = policy.pop();
         let fee_amount = (total_amount * bps) / FEE_DENOMINATOR;
         transfer::public_transfer(coin.split(fee_amount, ctx), recipient);
     };
@@ -98,97 +98,97 @@ public(package) fun collect<CoinType>(
 
 public fun add_collector(
     _: &AdminCap,
-    fees: &mut Fees,
+    policy: &mut Policy,
     recipient: address,
     bps: u64
 ) {
-    assert!(!fees.collectors.contains(&recipient), ERecipientAlreadyExists);
-    fees.collectors.insert(recipient, bps);
-    fees.assert_fees_not_too_high();
+    assert!(!policy.collectors.contains(&recipient), ERecipientAlreadyExists);
+    policy.collectors.insert(recipient, bps);
+    policy.assert_policy_not_too_high();
 }
 
 public fun edit_collector(
     _: &AdminCap,
-    fees: &mut Fees,
+    policy: &mut Policy,
     recipient: address,
     bps: u64
 ) {
-    assert!(fees.collectors.contains(&recipient), ERecipientDoesNotExist);
-    *fees.collectors.get_mut(&recipient) = bps;
-    fees.assert_fees_not_too_high();
+    assert!(policy.collectors.contains(&recipient), ERecipientDoesNotExist);
+    *policy.collectors.get_mut(&recipient) = bps;
+    policy.assert_policy_not_too_high();
 }
 
 public fun remove_collector(
     _: &AdminCap,
-    fees: &mut Fees,
+    policy: &mut Policy,
     recipient: address
 ) {
-    assert!(fees.collectors.contains(&recipient), ERecipientDoesNotExist);
-    fees.collectors.remove(&recipient);
+    assert!(policy.collectors.contains(&recipient), ERecipientDoesNotExist);
+    policy.collectors.remove(&recipient);
 }
 
 public fun allow_coin<T>(
     _: &AdminCap,
-    fees: &mut Fees,
+    policy: &mut Policy,
 ) {
     let type_name = type_name::get<T>();
-    fees.allowed_coins.insert(type_name);
+    policy.allowed_coins.insert(type_name);
 }
 
 public fun disallow_coin<T>(
     _: &AdminCap,
-    fees: &mut Fees
+    policy: &mut Policy
 ) {
     let type_name = type_name::get<T>();
-    fees.allowed_coins.remove(&type_name);
+    policy.allowed_coins.remove(&type_name);
 }
 
-public fun is_coin_allowed<T>(fees: &Fees): bool {
+public fun is_coin_allowed<T>(policy: &Policy): bool {
     let type_name = type_name::get<T>();
-    fees.allowed_coins.contains(&type_name)
+    policy.allowed_coins.contains(&type_name)
 }
 
-public fun assert_coin_allowed<T>(fees: &Fees) {
-    assert!(is_coin_allowed<T>(fees), ECoinTypeNotWhitelisted)
+public fun assert_coin_allowed<T>(policy: &Policy) {
+    assert!(is_coin_allowed<T>(policy), ECoinTypeNotWhitelisted)
 }
 
 public fun allow_fiat(
     _: &AdminCap,
-    fees: &mut Fees,
+    policy: &mut Policy,
     fiat_code: String,
 ) {
-    fees.allowed_fiat.insert(fiat_code);
+    policy.allowed_fiat.insert(fiat_code);
 }
 
 public fun disallow_fiat(
     _: &AdminCap,
-    fees: &mut Fees,
+    policy: &mut Policy,
     fiat_code: String,
 ) {
-    fees.allowed_fiat.remove(&fiat_code);
+    policy.allowed_fiat.remove(&fiat_code);
 }
 
 public fun is_fiat_allowed(
-    fees: &Fees,
+    policy: &Policy,
     fiat_code: String,
 ): bool {
-    fees.allowed_fiat.contains(&fiat_code)
+    policy.allowed_fiat.contains(&fiat_code)
 }
 
 public fun assert_fiat_allowed(
-    fees: &Fees,
+    policy: &Policy,
     fiat_code: String,
 ) {
-    assert!(is_fiat_allowed(fees, fiat_code), EFiatTypeNotWhitelisted)
+    assert!(is_fiat_allowed(policy, fiat_code), EFiatTypeNotWhitelisted)
 }
 
 public fun set_min_fill_deadline_ms(
     _: &AdminCap,
-    fees: &mut Fees,
+    policy: &mut Policy,
     new_min_fill_deadline_ms: u64,
 ) {
     assert_min_fill_deadline_too_low(new_min_fill_deadline_ms);
-    fees.min_fill_deadline_ms = new_min_fill_deadline_ms;
+    policy.min_fill_deadline_ms = new_min_fill_deadline_ms;
 }
 
 
@@ -200,15 +200,15 @@ public fun assert_min_fill_deadline_too_low(
 
 // === Private Functions ===
 
-fun assert_fees_not_too_high(fees: &Fees) {
-    let (mut fees, mut total_bps) = (fees.collectors, 0);
+fun assert_policy_not_too_high(policy: &Policy) {
+    let (mut policy, mut total_bps) = (policy.collectors, 0);
 
-    while (!fees.is_empty()) {
-        let (_, bps) = fees.pop();
+    while (!policy.is_empty()) {
+        let (_, bps) = policy.pop();
         total_bps = total_bps + bps;
     };
 
-    assert!(total_bps < FEE_DENOMINATOR / 2, ETotalFeesTooHigh);
+    assert!(total_bps < FEE_DENOMINATOR / 2, ETotalPolicyTooHigh);
 }
 
 // == Test Functions ==

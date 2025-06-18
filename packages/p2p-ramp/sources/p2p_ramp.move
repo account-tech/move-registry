@@ -24,7 +24,7 @@ use account_protocol::{
 };
 
 use p2p_ramp::{
-    fees::AdminCap,
+    policy::AdminCap,
     version
 };
 
