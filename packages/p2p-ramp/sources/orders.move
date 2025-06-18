@@ -570,6 +570,8 @@ public fun resolve_expired_buy_order_fill<CoinType>(
 
     transfer::public_transfer(coin, taker);
 
+    p2p_ramp::record_failed_trade(account);
+
     expired.destroy_empty();
 }
 
