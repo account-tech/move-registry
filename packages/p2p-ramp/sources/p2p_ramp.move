@@ -63,7 +63,7 @@ public struct FillEvent has copy, drop {
 public struct ConfigWitness() has drop;
 
 /// Central registry for all merchant accounts
-public struct Registry has key {
+public struct AccountRegistry has key {
     id: UID,
     merchants: Table<address, bool>
 }
@@ -125,7 +125,7 @@ public enum Status has copy, drop, store {
 // === Public functions ===
 
 fun init(ctx: &mut TxContext) {
-    transfer::share_object(Registry {
+    transfer::share_object(AccountRegistry {
         id: object::new(ctx),
         merchants: table::new(ctx),
     });
@@ -135,7 +135,7 @@ fun init(ctx: &mut TxContext) {
 /// Creator is added by default.
 /// AccountProtocol and P2PRamp are added as dependencies.
 public fun new_account(
-    registry: &mut Registry,
+    registry: &mut AccountRegistry,
     extensions: &Extensions,
     ctx: &mut TxContext,
 ): Account<P2PRamp> {
