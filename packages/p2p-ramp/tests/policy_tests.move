@@ -20,6 +20,7 @@ const ALICE: address = @0xA11CE;
 const BOB: address = @0xB0B;
 
 const MIN_FILL_DEADLINE_MS: u64 = 900_000;
+const MAX_ORDERS: u64 = 4;
 
 // === Helpers ===
 
@@ -49,7 +50,7 @@ fun test_getters() {
     assert!(policy.allowed_coins().is_empty());
     assert!(policy.allowed_fiat().is_empty());
     assert!(policy.min_fill_deadline_ms() == MIN_FILL_DEADLINE_MS);
-
+    assert!(policy.max_orders() == MAX_ORDERS);
     end(scenario, policy, cap);
 }
 

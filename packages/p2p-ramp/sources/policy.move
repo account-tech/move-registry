@@ -23,6 +23,7 @@ const EMinFillDeadlineTooLow: u64 = 5;
 
 const FEE_DENOMINATOR: u64 = 10_000;
 const MIN_FILL_DEADLINE_MS: u64 = 900_000;
+const MAX_ORDERS: u64 = 4;
 
 // === Structs ===
 
@@ -36,6 +37,8 @@ public struct Policy has key {
     allowed_fiat: VecSet<String>,
     // The minimum time a merchant can set for a fill deadline.
     min_fill_deadline_ms: u64,
+    // the max no_ of orders a merchant can create
+    max_orders: u64,
 }
 
 public struct AdminCap has key, store {
@@ -50,7 +53,8 @@ fun init(ctx: &mut TxContext) {
         collectors: vec_map::empty(),
         allowed_coins: vec_set::empty(),
         allowed_fiat: vec_set::empty(),
-        min_fill_deadline_ms: MIN_FILL_DEADLINE_MS
+        min_fill_deadline_ms: MIN_FILL_DEADLINE_MS,
+        max_orders: MAX_ORDERS,
     });
     // we only need one admin cap since it will be held by the dev multisig
     transfer::public_transfer(
@@ -75,6 +79,10 @@ public fun allowed_fiat(policy: &Policy): VecSet<String> {
 
 public fun min_fill_deadline_ms(policy: &Policy): u64 {
     policy.min_fill_deadline_ms
+}
+
+public fun max_orders(policy: &Policy): u64 {
+    policy.max_orders
 }
 
 // === Package Functions ===
