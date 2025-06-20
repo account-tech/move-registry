@@ -7,7 +7,9 @@ use sui::{
     balance::Balance,
     coin::Coin,
     event,
-    vec_set,
+    vec_set::{Self, VecSet},
+    vec_map::{Self, VecMap},
+    table::{Self, Table},
     clock::Clock
 };
 use account_protocol::{
@@ -38,6 +40,10 @@ const ENotFiatSender: u64 = 5;
 const ENotCoinSender: u64 = 6;
 const ECannotDestroyOrder: u64 = 7;
 const EDeadlineTooShort: u64 = 8;
+const EMaxOrderLimitExceeds: u64 = 9;
+const EBuyFillCoinSenderLimitExceeds: u64 = 10;
+const ESellFillFiatSenderLimitExceeds: u64 = 11;
+const EFillNotFound: u64 = 12;
 
 // === Constants ===
 
@@ -153,10 +159,25 @@ public enum CancellationKind has copy, drop {
     VoluntaryByMerchant,
 }
 
+/// Central registry for orders
+public struct OrderRegistry has key {
+    id: UID,
+    orders: Table<address, VecSet<address>>, // acc_addr <> order_id[]
+    fills: Table<address, VecMap<address, address>> // fill_manager <> <acc_addr, order_id>
+}
+
 // === Public functions ===
+fun init(ctx: &mut TxContext) {
+    transfer::share_object(OrderRegistry {
+        id: object::new(ctx),
+        orders: table::new(ctx),
+        fills: table::new(ctx),
+    });
+}
 
 /// Merchant creates an order
 public fun create_order<CoinType>(
+    registry: &mut OrderRegistry,
     auth: Auth,
     policy: &Policy,
     account: &mut Account<P2PRamp>,
@@ -171,6 +192,8 @@ public fun create_order<CoinType>(
     ctx: &mut TxContext,
 ) : address {
     if (is_buy) assert!(coin_balance.value() == 0, EWrongValue) else assert!(coin_balance.value() > 0, EWrongValue);
+    let addr = account.addr();
+    if (registry.orders.contains(addr)) assert!(registry.orders.borrow(addr).size() < policy.max_orders(), EMaxOrderLimitExceeds);
     account.verify(auth);
     // Only whitelisted currency are allowed for orders
     policy.assert_fiat_allowed(fiat_code);
@@ -210,11 +233,19 @@ public fun create_order<CoinType>(
         version::current()
     );
 
+    if(registry.orders.contains(account.addr())) {
+        let order_ids = registry.orders.borrow_mut(account.addr());
+        order_ids.insert(order_id);
+    } else {
+        registry.orders.add(account.addr(), vec_set::singleton(order_id));
+    };
+
     order_id
 }
 
 #[allow(lint(self_transfer))]
 public fun destroy_order<CoinType>(
+    registry: &mut OrderRegistry,
     auth: Auth,
     account: &mut Account<P2PRamp>,
     order_id: address,
@@ -230,13 +261,32 @@ public fun destroy_order<CoinType>(
 
     assert!(pending_fill == 0, ECannotDestroyOrder);
 
+    let account_addr = account.addr();
+    if (registry.orders.contains(account_addr)) {
+        let order_set_ref = table::borrow(&registry.orders, account_addr);
+        if (vec_set::contains(order_set_ref, &order_id)) {
+            let mut order_set = table::remove(&mut registry.orders, account_addr);
+            vec_set::remove(&mut order_set, &order_id);
+            if (!vec_set::is_empty(&order_set)) {
+                table::add(&mut registry.orders, account_addr, order_set);
+            } else {
+                vector::destroy_empty(order_set.into_keys());
+            }
+        }
+    };
+
     event::emit(DestroyOrderEvent {
         by: account.addr(),
         order_id
     });
 
-    transfer::public_transfer(coin_balance.into_coin(ctx), ctx.sender());
+    if (coin_balance.value() > 0) {
+        transfer::public_transfer(coin_balance.into_coin(ctx), ctx.sender());
+    } else {
+        coin_balance.destroy_zero();
+    }
 }
+
 
 public fun get_order<CoinType>(
     account: &mut Account<P2PRamp>,
@@ -249,6 +299,7 @@ public fun get_order<CoinType>(
 
 /// Customer deposits coin to get fiat
 public fun request_fill_buy_order<CoinType>(
+    registry: &mut OrderRegistry,
     mut outcome: Handshake,
     account: &mut Account<P2PRamp>,
     order_id: address,
@@ -256,6 +307,7 @@ public fun request_fill_buy_order<CoinType>(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
+    assert!(outcome.coin_senders().size() == 1, EBuyFillCoinSenderLimitExceeds);
     assert!(outcome.coin_senders().contains(&ctx.sender()), ENotCoinSender);
     assert!(contains_any!(&account.config().members(), &outcome.fiat_senders()), ENotFiatSender);
 
@@ -297,10 +349,13 @@ public fun request_fill_buy_order<CoinType>(
         ctx,
         |intent, iw| intent.add_action(FillBuyAction { order_id, coin, taker: ctx.sender() }, iw)
     );
+
+    record_fill(registry, outcome.coin_senders().keys(), account.addr(), order_id);
 }
 
 /// Customer requests to get coins by paying with fiat
 public fun request_fill_sell_order<CoinType>(
+    registry: &mut OrderRegistry,
     mut outcome: Handshake,
     account: &mut Account<P2PRamp>,
     order_id: address,
@@ -308,6 +363,7 @@ public fun request_fill_sell_order<CoinType>(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
+    assert!(outcome.fiat_senders().size() == 1, ESellFillFiatSenderLimitExceeds);
     assert!(outcome.fiat_senders().contains(&ctx.sender()), ENotFiatSender);
     assert!(contains_any!(&account.config().members(), &outcome.coin_senders()), ENotCoinSender);
 
@@ -349,9 +405,12 @@ public fun request_fill_sell_order<CoinType>(
         ctx,
         |intent, iw| intent.add_action(FillSellAction { order_id, amount, taker: ctx.sender() }, iw)
     );
+
+    record_fill(registry, outcome.fiat_senders().keys(), account.addr(), order_id);
 }
 
 public fun execute_fill_buy_order<CoinType>(
+    registry: &mut OrderRegistry,
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
     policy: &mut Policy,
@@ -366,6 +425,7 @@ public fun execute_fill_buy_order<CoinType>(
 
     let key = executable.intent().key();
     let outcome = intents::outcome(executable.intent());
+    let coin_senders = outcome.coin_senders().keys();
     let paid_time = outcome.paid_timestamp_ms();
     let settled_time = outcome.settled_timestamp_ms();
     account.confirm_execution(executable);
@@ -392,11 +452,13 @@ public fun execute_fill_buy_order<CoinType>(
 
     // update accounts' reputation
     p2p_ramp::record_successful_trade<CoinType>(account, order.fiat_code, fiat_amount, coin_amount, release_time);
+    unrecord_fill(registry, coin_senders, account.addr(), order_id);
 
     expired.destroy_empty();
 }
 
 public fun execute_fill_sell_order<CoinType>(
+    registry: &mut OrderRegistry,
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
     policy: &mut Policy,
@@ -411,6 +473,7 @@ public fun execute_fill_sell_order<CoinType>(
 
     let key = executable.intent().key();
     let outcome = intents::outcome(executable.intent());
+    let fiat_senders = outcome.fiat_senders().keys();
     let paid_time = outcome.paid_timestamp_ms();
     let settled_time = outcome.settled_timestamp_ms();
     account.confirm_execution(executable);
@@ -439,12 +502,14 @@ public fun execute_fill_sell_order<CoinType>(
 
     // update accounts' reputation
     p2p_ramp::record_successful_trade<CoinType>(account, order.fiat_code, coin_for_fiat, coin_amount, release_time);
+    unrecord_fill(registry, fiat_senders, account.addr(), order_id);
 
     expired.destroy_empty();
 }
 
 public fun resolve_dispute_buy_order<CoinType>(
     _: &AdminCap,
+    registry: &mut OrderRegistry,
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
     policy: &mut Policy,
@@ -459,6 +524,8 @@ public fun resolve_dispute_buy_order<CoinType>(
     );
 
     let key = executable.intent().key();
+    let outcome = intents::outcome(executable.intent());
+    let coin_senders = outcome.coin_senders().keys();
     account.confirm_execution(executable);
     let mut expired = account.destroy_empty_intent<_, Handshake>(key);
     let FillBuyAction<CoinType> { order_id, mut coin, taker } = expired.remove_action();
@@ -485,12 +552,14 @@ public fun resolve_dispute_buy_order<CoinType>(
     });
 
     p2p_ramp::record_dispute_outcome(account, recipient);
+    unrecord_fill(registry, coin_senders, account.addr(), order_id);
 
     expired.destroy_empty();
 }
 
 public fun resolve_dispute_sell_order<CoinType>(
     _: &AdminCap,
+    registry: &mut OrderRegistry,
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
     policy: &mut Policy,
@@ -505,6 +574,8 @@ public fun resolve_dispute_sell_order<CoinType>(
     );
 
     let key = executable.intent().key();
+    let outcome = intents::outcome(executable.intent());
+    let fiat_senders = outcome.fiat_senders().keys();
     account.confirm_execution(executable);
     let mut expired = account.destroy_empty_intent<_, Handshake>(key);
     let FillSellAction { order_id, amount, taker } = expired.remove_action();
@@ -534,11 +605,13 @@ public fun resolve_dispute_sell_order<CoinType>(
     });
 
     p2p_ramp::record_dispute_outcome(account, recipient);
+    unrecord_fill(registry, fiat_senders, account.addr(), order_id);
 
     expired.destroy_empty();
 }
 
 public fun resolve_expired_buy_order_fill<CoinType>(
+    registry: &mut OrderRegistry,
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
     ctx: &mut TxContext,
@@ -552,6 +625,8 @@ public fun resolve_expired_buy_order_fill<CoinType>(
     );
 
     let key = executable.intent().key();
+    let outcome = intents::outcome(executable.intent());
+    let coin_senders = outcome.coin_senders().keys();
     account.confirm_execution(executable);
     let mut expired = account.destroy_empty_intent<_, Handshake>(key);
     let FillBuyAction<CoinType> { order_id, coin, taker } = expired.remove_action();
@@ -571,11 +646,13 @@ public fun resolve_expired_buy_order_fill<CoinType>(
     transfer::public_transfer(coin, taker);
 
     p2p_ramp::record_failed_trade(account);
+    unrecord_fill(registry, coin_senders, account.addr(), order_id);
 
     expired.destroy_empty();
 }
 
 public fun resolve_expired_sell_order_fill<CoinType>(
+    registry: &mut OrderRegistry,
     mut executable: Executable<Handshake>,
     account: &mut Account<P2PRamp>,
     ctx: &mut TxContext,
@@ -588,6 +665,8 @@ public fun resolve_expired_sell_order_fill<CoinType>(
     );
 
     let key = executable.intent().key();
+    let outcome = intents::outcome(executable.intent());
+    let fiat_senders = outcome.fiat_senders().keys();
     account.confirm_execution(executable);
     let mut expired = account.destroy_empty_intent<_, Handshake>(key);
     let FillSellAction { order_id, amount, .. } = expired.remove_action();
@@ -609,12 +688,15 @@ public fun resolve_expired_sell_order_fill<CoinType>(
         reason: b"system".to_string(),
     });
 
+    unrecord_fill(registry, fiat_senders, account.addr(), order_id);
+
     expired.destroy_empty();
 }
 
 /// Allow a merchant to cancel a fill on their own BUY order
 /// before they have sent payment. Returns the taker's locked coins to them.
-public fun merchant_cancel_fill<CoinType>(
+public fun merchant_cancel_buy_fill<CoinType>(
+    registry: &mut OrderRegistry,
     auth: Auth,
     account: &mut Account<P2PRamp>,
     reason: String,
@@ -631,6 +713,8 @@ public fun merchant_cancel_fill<CoinType>(
     );
 
     let key = executable.intent().key();
+    let outcome = intents::outcome(executable.intent());
+    let coin_senders = outcome.coin_senders().keys();
     account.confirm_execution(executable);
     let mut expired = account.destroy_empty_intent<_, Handshake>(key);
     let FillBuyAction<CoinType> { order_id, coin, taker } = expired.remove_action();
@@ -652,6 +736,7 @@ public fun merchant_cancel_fill<CoinType>(
     transfer::public_transfer(coin, taker);
 
     p2p_ramp::record_failed_trade(account);
+    unrecord_fill(registry, coin_senders, account.addr(), order_id);
 
     expired.destroy_empty();
 }
@@ -659,6 +744,7 @@ public fun merchant_cancel_fill<CoinType>(
 /// NEW: Public function for a taker to cancel their fill on a SELL order
 /// before they have sent payment. Refunds their gas_bond.
 public fun taker_cancel_sell_order_fill<CoinType>(
+    registry: &mut OrderRegistry,
     account: &mut Account<P2PRamp>,
     reason: String,
     mut executable: Executable<Handshake>,
@@ -672,6 +758,8 @@ public fun taker_cancel_sell_order_fill<CoinType>(
     );
 
     let key = executable.intent().key();
+    let outcome = intents::outcome(executable.intent());
+    let fiat_senders = outcome.fiat_senders().keys();
     account.confirm_execution(executable);
     let mut expired = account.destroy_empty_intent<_, Handshake>(key);
     let FillSellAction { order_id, amount, taker } = expired.remove_action();
@@ -692,7 +780,7 @@ public fun taker_cancel_sell_order_fill<CoinType>(
 
     // CRITICAL: Return the taker's good-faith deposit to them
     // transfer::public_transfer(gas_bond, taker, ctx);
-
+    unrecord_fill(registry, fiat_senders, account.addr(), order_id);
     expired.destroy_empty();
 }
 
@@ -758,6 +846,30 @@ public fun completed_fill<CoinType>(
     order.completed_fill
 }
 
+public fun get_order_ids_by_account(
+    registry: &OrderRegistry,
+    account_addr: address
+): vector<address> {
+    if (registry.orders.contains(account_addr)) {
+        let order_set = registry.orders.borrow(account_addr);
+        let mut orders_copy = vector::empty<address>();
+        vector::do_ref!(order_set.keys(), |k| {
+            orders_copy.push_back(*k);
+        });
+        orders_copy
+    } else {
+        vector::empty<address>()
+    }
+}
+
+public fun get_fill_ids_by_filler(
+    registry: &OrderRegistry,
+    filler_addr: address
+): &VecMap<address, address> {
+    assert!(registry.fills.contains(filler_addr), EFillNotFound);
+    registry.fills.borrow(filler_addr)
+}
+
 // === Private functions ===
 
 fun get_order_mut<CoinType>(
@@ -793,6 +905,51 @@ fun assert_can_be_filled<CoinType>(order: &Order<CoinType>, amount: u64) {
     );
 }
 
+fun record_fill(
+    registry: &mut OrderRegistry,
+    keys: &vector<address>,
+    account_addr: address,
+    order_id: address,
+) {
+    vector::do_ref!(keys, |k| {
+        if (table::contains(&registry.fills, *k)) {
+            let fill_map = registry.fills.borrow_mut(*k);
+            if (fill_map.contains(&account_addr)) {
+                fill_map.insert(account_addr, order_id);
+            }
+        } else {
+            let new_fill_map = vec_map::from_keys_values(vector[account_addr], vector[order_id]);
+            registry.fills.add(*k, new_fill_map);
+         };
+    });
+}
+
+/// The opposite of `record_fill`.
+/// Removes an `order_id` from the `fills` registry for a given vector of keys.
+/// If removing the `order_id` results in an empty set for a key, the key's
+/// entire entry is removed from the table to clean up storage.
+public fun unrecord_fill(
+    registry: &mut OrderRegistry,
+    keys: &vector<address>,
+    account_addr: address,
+    _order_id: address,
+) {
+    vector::do_ref!(keys, |k| {
+        if (table::contains(&registry.fills, *k)) {
+            let mut fill_map = table::remove(&mut registry.fills, *k);
+            if (fill_map.contains(&account_addr)) {
+                fill_map.remove(&account_addr);
+                if (fill_map.is_empty()) {
+                    fill_map.destroy_empty();
+                } else {
+                    registry.fills.add(*k, fill_map);
+                }
+            } else {
+                registry.fills.add(*k, fill_map);
+           }
+        }
+  });
+}
 
 macro fun contains_any<$K: copy + drop>($a: &vec_set::VecSet<$K>, $b: &vec_set::VecSet<$K>): bool {
     let keys_b = vec_set::keys($b);
@@ -808,3 +965,9 @@ macro fun contains_any<$K: copy + drop>($a: &vec_set::VecSet<$K>, $b: &vec_set::
     false
 }
 
+// == Test Functions ==
+
+#[test_only]
+public fun init_for_testing(ctx: &mut TxContext) {
+    init(ctx);
+}
