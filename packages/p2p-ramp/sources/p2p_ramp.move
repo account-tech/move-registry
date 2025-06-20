@@ -3,11 +3,16 @@ module p2p_ramp::p2p_ramp;
 
 // === Imports ===
 
-use std::string::String;
+use std::{
+    string::String,
+    type_name::{Self, TypeName}
+};
 use sui::{
     vec_set::{Self, VecSet},
     clock::Clock,
-    table::{Self, Table}
+    table::{Self, Table},
+    vec_map::{Self, VecMap},
+    event,
 };
 use account_extensions::extensions::Extensions;
 use account_protocol::{
@@ -19,7 +24,7 @@ use account_protocol::{
 };
 
 use p2p_ramp::{
-    fees::AdminCap,
+    policy::AdminCap,
     version
 };
 
@@ -41,6 +46,16 @@ const ENotCoinSender: u64 = 6;
 const ECannotDispute: u64 = 7;
 const ENotSettled: u64 = 8;
 const ENotDisputed: u64 = 9;
+const EPaymentWindowExpired: u64 = 10;
+const EPaymentWindowNotExpired: u64 = 11;
+
+// === Events ===
+
+public struct FillEvent has copy, drop {
+    status: Status,
+    key: String,
+    by: address
+}
 
 // === Structs ===
 
@@ -48,7 +63,7 @@ const ENotDisputed: u64 = 9;
 public struct ConfigWitness() has drop;
 
 /// Central registry for all merchant accounts
-public struct Registry has key {
+public struct AccountRegistry has key {
     id: UID,
     merchants: Table<address, bool>
 }
@@ -59,20 +74,40 @@ public struct P2PRamp has copy, drop, store {
     members: VecSet<address>,
 }
 
+public struct Reputation has store {
+    successful_trades: u64,
+    failed_trades: u64,
+    total_coin_volume: VecMap<TypeName, u64>,
+    total_fiat_volume: VecMap<String, u64>,
+    total_release_time_ms: u128,
+    disputes_won: u64,
+    disputes_lost: u64,
+}
+
+/// Df key for Reputation
+public struct ReputationKey() has copy, drop, store;
+
 /// Outcome struct with the approved address
 public struct Approved has copy, drop, store {
     // if owner approved the intent
-    approved: bool, 
+    approved: bool,
 }
 
 /// Outcome for resolving an order
 public struct Handshake has copy, drop, store {
-    // address of the party that will send the fiat
-    fiat_sender: address, 
-    // address of the party that will send the coin
-    coin_sender: address, 
+    // addresses of the party that will send the fiat
+    fiat_senders: VecSet<address>,
+    // addresses of the party that will send the coin
+    coin_senders: VecSet<address>,
     // status of the handshake
     status: Status,
+    // ms by which payment must be flagged. Whatever the taker passes to this will be overwritten
+    // by the order authority
+    payment_deadline_ms: u64,
+    // timestamp of when the fiat sender confirmed payment.
+    paid_timestamp_ms: u64,
+    // timestamp of when the coin sender confirmed receipt of fiat.
+    settled_timestamp_ms: u64,
 }
 
 /// Enum for tracking request status
@@ -90,7 +125,7 @@ public enum Status has copy, drop, store {
 // === Public functions ===
 
 fun init(ctx: &mut TxContext) {
-    transfer::share_object(Registry {
+    transfer::share_object(AccountRegistry {
         id: object::new(ctx),
         merchants: table::new(ctx),
     });
@@ -100,15 +135,15 @@ fun init(ctx: &mut TxContext) {
 /// Creator is added by default.
 /// AccountProtocol and P2PRamp are added as dependencies.
 public fun new_account(
-    registry: &mut Registry,
+    registry: &mut AccountRegistry,
     extensions: &Extensions,
     ctx: &mut TxContext,
 ): Account<P2PRamp> {
     let config = P2PRamp {
         members: vec_set::from_keys(vector[ctx.sender()]),
     };
-    
-   let account = account_interface::create_account!(
+
+   let mut account = account_interface::create_account!(
         config,
         version::current(),
         ConfigWitness(),
@@ -118,6 +153,22 @@ public fun new_account(
             vector[b"AccountProtocol".to_string(), b"P2PRamp".to_string()]
         )
     );
+
+    // we initialize key metrics for this account
+    account.add_managed_data(
+        ReputationKey(),
+        Reputation {
+            successful_trades: 0,
+            failed_trades: 0,
+            total_coin_volume: vec_map::empty(),
+            total_fiat_volume: vec_map::empty(),
+            total_release_time_ms: 0,
+            disputes_won: 0,
+            disputes_lost: 0,
+        },
+        version::current(),
+    );
+
     // we'll use the bool for toggling availability
     registry.merchants.add(account.addr(), true);
 
@@ -152,8 +203,8 @@ public fun approve_intent(
     account.config().assert_is_member(ctx);
 
     account.resolve_intent!<_, Approved, _>(
-        key, 
-        version::current(), 
+        key,
+        version::current(),
         ConfigWitness(),
         |outcome| {
             assert!(!outcome.approved, EAlreadyApproved);
@@ -171,40 +222,83 @@ public fun disapprove_intent(
     account.config().assert_is_member(ctx);
 
     account.resolve_intent!<_, Approved, _>(
-        key, 
-        version::current(), 
+        key,
+        version::current(),
         ConfigWitness(),
-        |outcome| { 
+        |outcome| {
             assert!(outcome.approved, ENotApproved);
-            outcome.approved = false 
+            outcome.approved = false
         }
     );
 }
 
 /// Anyone can execute an intent, this allows to automate the execution of intents.
 public fun execute_approved_intent(
-    account: &mut Account<P2PRamp>, 
-    key: String, 
+    account: &mut Account<P2PRamp>,
+    key: String,
     clock: &Clock,
 ): Executable<Approved> {
     account.execute_intent!<_, Approved, _>(
-        key, 
-        clock, 
-        version::current(), 
+        key,
+        clock,
+        version::current(),
         ConfigWitness(),
         |outcome| assert!(outcome.approved == true, ENotApproved)
     )
 }
 
+/// Allows a merchant to execute a cancellation on a BUY ORDER fill
+/// that they have not yet paid for.
+public fun execute_merchant_cancellation_intent(
+    account: &mut Account<P2PRamp>,
+    key: String,
+    clock: &Clock,
+    ctx: &TxContext,
+): Executable<Handshake> {
+    account.config().assert_is_member(ctx);
+
+    account.execute_intent!<_, Handshake, _>(
+        key,
+        clock,
+        version::current(),
+        ConfigWitness(),
+        |outcome| {
+            assert!(outcome.status == Status::Requested, ENotRequested);
+            assert!(outcome.fiat_senders.contains(&ctx.sender()), ENotFiatSender);
+        }
+    )
+}
+
+public fun execute_sell_order_taker_cancellation(
+    account: &mut Account<P2PRamp>,
+    key: String,
+    clock: &Clock,
+    ctx: &mut TxContext,
+): Executable<Handshake> {
+    account.execute_intent!<_, Handshake, _>(
+        key,
+        clock,
+        version::current(),
+        ConfigWitness(),
+        |outcome| {
+            assert!(outcome.status == Status::Requested, ENotRequested);
+            assert!(outcome.fiat_senders.contains(&ctx.sender()), ENotFiatSender);
+        }
+    )
+}
+
 // Handshake (order) intents
 
-public(package) fun requested_handshake_outcome(
-    fiat_sender: address,
-    coin_sender: address,
+public fun requested_handshake_outcome(
+    fiat_senders: vector<address>,
+    coin_senders: vector<address>,
 ): Handshake {
-    Handshake { 
-        fiat_sender,
-        coin_sender,
+    Handshake {
+        fiat_senders: vec_set::from_keys(fiat_senders),
+        coin_senders: vec_set::from_keys(coin_senders),
+        payment_deadline_ms: 0,
+        paid_timestamp_ms: 0,
+        settled_timestamp_ms: 0,
         status: Status::Requested,
     }
 }
@@ -212,36 +306,55 @@ public(package) fun requested_handshake_outcome(
 public fun flag_as_paid(
     account: &mut Account<P2PRamp>,
     key: String,
+    clock: &Clock,
     ctx: &TxContext,
 ) {
-
+    let sender = ctx.sender();
     account.resolve_intent!<_, Handshake, _>(
-        key, 
-        version::current(), 
-        ConfigWitness(), 
+        key,
+        version::current(),
+        ConfigWitness(),
         |outcome| {
             assert!(outcome.status == Status::Requested, ENotRequested);
-            assert!(outcome.fiat_sender == ctx.sender(), ENotFiatSender);
+            assert!(outcome.fiat_senders.contains(&sender), ENotFiatSender);
+            assert!(clock.timestamp_ms() <= outcome.payment_deadline_ms, EPaymentWindowExpired);
+            outcome.paid_timestamp_ms = clock.timestamp_ms();
             outcome.status = Status::Paid;
         }
     );
+
+    event::emit(FillEvent {
+        status: Status::Paid,
+        key,
+        by: sender
+    });
+
 }
 
 public fun flag_as_settled(
     account: &mut Account<P2PRamp>,
     key: String,
+    clock: &Clock,
     ctx: &TxContext,
 ) {
+    let sender = ctx.sender();
     account.resolve_intent!<_, Handshake, _>(
-        key, 
-        version::current(), 
-        ConfigWitness(), 
+        key,
+        version::current(),
+        ConfigWitness(),
         |outcome| {
             assert!(outcome.status == Status::Paid, ENotPaid);
-            assert!(outcome.coin_sender == ctx.sender(), ENotCoinSender);
+            assert!(outcome.coin_senders.contains(&sender), ENotCoinSender);
+            outcome.settled_timestamp_ms = clock.timestamp_ms();
             outcome.status = Status::Settled;
         }
     );
+
+    event::emit(FillEvent {
+        status: Status::Settled,
+        key,
+        by: sender,
+    });
 }
 
 public fun flag_as_disputed(
@@ -249,32 +362,37 @@ public fun flag_as_disputed(
     key: String,
     ctx: &TxContext,
 ) {
+    let sender = ctx.sender();
     account.resolve_intent!<_, Handshake, _>(
-        key, 
-        version::current(), 
-        ConfigWitness(), 
+        key,
+        version::current(),
+        ConfigWitness(),
         |outcome| {
-            assert!(
-                (outcome.status == Status::Requested ||
-                outcome.status == Status::Paid) &&
-                (outcome.coin_sender == ctx.sender() || 
-                outcome.fiat_sender == ctx.sender()), 
+            assert!(outcome.status == Status::Paid &&
+                (outcome.coin_senders.contains(&sender) ||
+                outcome.fiat_senders.contains(&sender)),
                 ECannotDispute
             );
             outcome.status = Status::Disputed;
         }
     );
+
+    event::emit(FillEvent {
+        status: Status::Disputed,
+        key,
+        by: sender,
+    });
 }
 
 public fun execute_handshake_intent(
-    account: &mut Account<P2PRamp>, 
-    key: String, 
+    account: &mut Account<P2PRamp>,
+    key: String,
     clock: &Clock,
 ): Executable<Handshake> {
     account.execute_intent!<_, Handshake, _>(
-        key, 
-        clock, 
-        version::current(), 
+        key,
+        clock,
+        version::current(),
         ConfigWitness(),
         |outcome| assert!(outcome.status == Status::Settled, ENotSettled)
     )
@@ -282,16 +400,33 @@ public fun execute_handshake_intent(
 
 public fun resolve_handshake_intent(
     _: &AdminCap,
-    account: &mut Account<P2PRamp>, 
-    key: String, 
+    account: &mut Account<P2PRamp>,
+    key: String,
     clock: &Clock,
 ): Executable<Handshake> {
     account.execute_intent!<_, Handshake, _>(
-        key, 
-        clock, 
-        version::current(), 
+        key,
+        clock,
+        version::current(),
         ConfigWitness(),
         |outcome| assert!(outcome.status == Status::Disputed, ENotDisputed)
+    )
+}
+
+public fun resolve_handshake_intent_expired_fill(
+    account: &mut Account<P2PRamp>,
+    key: String,
+    clock: &Clock,
+) : Executable<Handshake> {
+    account.execute_intent!<_, Handshake, _>(
+        key,
+        clock,
+        version::current(),
+        ConfigWitness(),
+        |outcome|  {
+            assert!(clock.timestamp_ms() > outcome.payment_deadline_ms, EPaymentWindowNotExpired);
+            assert!(outcome.status == Status::Requested, ENotRequested);
+        }
     )
 }
 
@@ -334,16 +469,86 @@ public fun approved(active: &Approved): bool {
     active.approved
 }
 
-public fun fiat_sender(handshake: &Handshake): address {
-    handshake.fiat_sender
+public fun fiat_senders(handshake: &Handshake): VecSet<address> {
+    handshake.fiat_senders
 }
 
-public fun coin_sender(handshake: &Handshake): address {
-    handshake.coin_sender
+public fun coin_senders(handshake: &Handshake): VecSet<address> {
+    handshake.coin_senders
+}
+
+public fun payment_deadline_ms(handshake: &Handshake): u64 {
+    handshake.payment_deadline_ms
+}
+
+public fun paid_timestamp_ms(handshake: &Handshake): u64 {
+    handshake.paid_timestamp_ms
+}
+
+public fun settled_timestamp_ms(handshake: &Handshake): u64 {
+    handshake.settled_timestamp_ms
 }
 
 public fun status(handshake: &Handshake): Status {
     handshake.status
+}
+
+public fun reputation(account: &Account<P2PRamp>): &Reputation {
+    account.borrow_managed_data(ReputationKey(), version::current())
+}
+
+public fun successful_trades(rep: &Reputation) : u64 {
+    rep.successful_trades
+}
+
+public fun failed_trades(rep: &Reputation): u64 {
+    rep.failed_trades
+}
+
+public fun total_coin_volume(rep: &Reputation): VecMap<TypeName, u64> {
+    return rep.total_coin_volume
+}
+
+public fun total_fiat_volume(rep: &Reputation): VecMap<String, u64> {
+    return rep.total_fiat_volume
+}
+
+public fun total_release_time_ms(rep: &Reputation): u128 {
+    return rep.total_release_time_ms
+}
+
+public fun disputes_won(rep: &Reputation): u64 {
+    return rep.disputes_won
+}
+
+public fun disputes_lost(rep: &Reputation): u64 {
+    return rep.disputes_lost
+}
+
+/// Calculates and returns the average release time for a given Account.
+public fun avg_release_time_ms(rep: &Reputation): u64 {
+
+    if (rep.successful_trades == 0) {
+        return 0
+    };
+
+    (rep.total_release_time_ms / (rep.successful_trades as u128)) as u64
+}
+
+/// Calculates and returns the merchant's completion rate for a given Account.
+public fun completion_rate(rep: &Reputation): u8 {
+
+    let successful = rep.successful_trades;
+    let failed = rep.failed_trades;
+    let total = successful + failed;
+
+    if (total == 0) {
+        return 0
+    };
+
+    let rate = (successful * 100) / total;
+
+    rate as u8
 }
 
 // === Package functions ===
@@ -358,6 +563,69 @@ public(package) fun new_config(
 /// Returns a mutable reference to the P2PRamp configuration.
 public(package) fun config_mut(account: &mut Account<P2PRamp>): &mut P2PRamp {
     account.config_mut(version::current(), ConfigWitness())
+}
+
+/// Returns a mutable reference to the account reputation
+public(package) fun get_rep_mut(
+    account: &mut Account<P2PRamp>,
+) : &mut Reputation {
+    account.borrow_managed_data_mut(ReputationKey(), version::current())
+}
+
+public(package) fun set_payment_deadline(
+    handshake: &mut Handshake,
+    new_deadline: u64,
+) {
+    handshake.payment_deadline_ms = new_deadline;
+}
+
+/// Updates accounts' reputation for successful trades
+public(package) fun record_successful_trade<CoinType>(
+    account: &mut Account<P2PRamp>,
+    fiat_code: String,
+    fiat_amount: u64,
+    coin_amount: u64,
+    release_time_ms: u64,
+) {
+    let rep = get_rep_mut(account);
+    let coin_type_name = type_name::get<CoinType>();
+    rep.successful_trades = rep.successful_trades + 1;
+
+    if (rep.total_fiat_volume.contains(&fiat_code)) {
+        let current_fiat_vol = rep.total_fiat_volume.get_mut(&fiat_code);
+        *current_fiat_vol = *current_fiat_vol + fiat_amount;
+    } else {
+        rep.total_fiat_volume.insert(fiat_code, fiat_amount);
+    };
+
+    if (rep.total_coin_volume.contains(&coin_type_name)) {
+        let current_coin_vol = rep.total_coin_volume.get_mut(&coin_type_name);
+        *current_coin_vol = *current_coin_vol + coin_amount;
+    } else {
+        rep.total_coin_volume.insert(coin_type_name, coin_amount);
+    };
+
+    rep.total_release_time_ms = rep.total_release_time_ms + (release_time_ms as u128);
+}
+
+public(package) fun record_dispute_outcome(
+    account: &mut Account<P2PRamp>,
+    winner: address,
+) {
+    let members = account.config().members();
+    let rep = get_rep_mut(account);
+
+    if (members.contains(&winner)) {
+        rep.disputes_won = rep.disputes_won + 1;
+    } else {
+        rep.disputes_lost = rep.disputes_lost + 1;
+        rep.failed_trades = rep.failed_trades + 1;
+    }
+}
+
+public(package) fun record_failed_trade(account: &mut Account<P2PRamp>) {
+    let rep = get_rep_mut(account);
+    rep.failed_trades = rep.failed_trades + 1;
 }
 
 // === Test functions ===

@@ -13,12 +13,24 @@ use account_protocol::{
 use account_dao::{
     dao::{Self, Dao, Votes},
     version,
+    math,
 };
 
 // === Aliases ===
 
 use fun intent_interface::build_intent as Account.build_intent;
 use fun intent_interface::process_intent as Account.process_intent;
+
+// === Constants ===
+
+const VOTING_RULE: u8 = LINEAR | QUADRATIC;
+const LINEAR: u8 = 0;
+const QUADRATIC: u8 = 1;
+
+// === Errors ===
+
+const EInvalidMaxVotingPower: u64 = 0;
+const EInvalidVotingRule: u64 = 1;
 
 // === Structs ===
 
@@ -50,6 +62,15 @@ public fun request_config_dao<AssetType>(
     ctx: &mut TxContext
 ) {
     account.verify(auth);
+
+    assert!(voting_rule & VOTING_RULE == voting_rule, EInvalidVotingRule);
+    if (voting_rule == LINEAR) {
+        assert!(max_voting_power >= auth_voting_power, EInvalidMaxVotingPower);
+    } else if (voting_rule == QUADRATIC) {
+        assert!(max_voting_power >= math::sqrt_down(auth_voting_power), EInvalidMaxVotingPower);
+    } else {
+        abort EInvalidVotingRule
+    };
 
     let config = dao::new_config<AssetType>(
         auth_voting_power, 

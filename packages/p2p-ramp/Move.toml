@@ -5,8 +5,10 @@ license = "Apache 2.0"
 authors = ["Aaron (aaron@mcxross.xyz)", "Thouny (thouny@tuta.io)"]
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
 AccountProtocol = { git = "https://github.com/account-tech/move-framework.git", subdir = "packages/protocol", rev="main" }
 
 [addresses]
-p2p_ramp = "0x0"
+p2p_ramp = "0x9a56d76d6fa3a1669e2c8b3b6f49eea43608d9ecbf49eaa22ebaa81e01a7d1d9"
+# Registry = "0x4288b09ccf20ae896f33276a806c45b165b15b0eb2cfc6bad7258c1f3234353e"
+# Fees = "0x46e5b684aac57d6118851a18e79a8c8588a0c78d0b80701b6d870d67550739f8"
+# AdminCap = "0xd09c5a0fce234afbe2d82d7f387fbb0e1549a55b4613992f50c056487d86a3f0"
