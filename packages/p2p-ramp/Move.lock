@@ -2,9 +2,10 @@
 
 [move]
 version = 3
-manifest_digest = "E22C83E65728AB1DB127BD096F131C7454E7146E50A55CA4048006C7B68D96E6"
-deps_digest = "397E6A9F7A624706DBDFEE056CE88391A15876868FD18A88504DA74EB458D697"
+manifest_digest = "3816D8A7F9631776E60374948F88BA48194BB43EF79DCDF59C13C74CB1666D96"
+deps_digest = "52B406A7A21811BEF51751CF88DA0E76DAEFFEAC888D4F4060B1A72BBE7D8D35"
 dependencies = [
+  { id = "AccountExtensions", name = "AccountExtensions" },
   { id = "AccountProtocol", name = "AccountProtocol" },
   { id = "Bridge", name = "Bridge" },
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -69,6 +70,6 @@ flavor = "sui"
 
 [env.testnet]
 chain-id = "4c78adac"
-original-published-id = "0x785d6798769a2b2fabfca977d535c1e2b2b43ea50c6e47a76a39a2e0e58c470c"
-latest-published-id = "0x785d6798769a2b2fabfca977d535c1e2b2b43ea50c6e47a76a39a2e0e58c470c"
+original-published-id = "0x9c09daf59b0630762a712a9dd043eb35cec87d5ddbb77452497bdd87392b9b50"
+latest-published-id = "0x9c09daf59b0630762a712a9dd043eb35cec87d5ddbb77452497bdd87392b9b50"
 published-version = "1"

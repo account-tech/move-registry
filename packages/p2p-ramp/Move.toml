@@ -5,11 +5,12 @@ license = "Apache 2.0"
 authors = ["Aaron (aaron@mcxross.xyz)", "Thouny (thouny@tuta.io)"]
 
 [dependencies]
+AccountExtensions = { git = "https://github.com/account-tech/move-framework.git", subdir = "packages/extensions", rev="main" }
 AccountProtocol = { git = "https://github.com/account-tech/move-framework.git", subdir = "packages/protocol", rev="main" }
 
 [addresses]
-p2p_ramp = "0x785d6798769a2b2fabfca977d535c1e2b2b43ea50c6e47a76a39a2e0e58c470c"
-# OrderRegistry = "0xca6625c6ba01a59b10aa904a501c7cbbcc764a4e678b773b623947971bfc20d8"
-# AccountRegistry = "0x3e38bd54d932a8aa922aff4613101abefcc92f7c21d756544377855a02609c32"
-# Policy = "0x2b6732872b21977b18dc62d0f81d205a0ea73a1f23dd1bbf91aadffc8475734b"
-# AdminCap = "0x72ba0824fdc52fe12be05cba2b68aa96465d735d9c70c54febd7b84100eeeca0"
+p2p_ramp = "0x9c09daf59b0630762a712a9dd043eb35cec87d5ddbb77452497bdd87392b9b50"
+# OrderRegistry = "0xbfb1078fdba247c6b8a6a6f64b6559f2673fbac98ead92938cee02867dd1d653"
+# AccountRegistry = "0x01327a5e0ae0617d09d3151a2d4db4112f0b910221d457e8747253de32e70b17"
+# Policy = "0x9afa420bb740836997cc5fe3cea02a1726d4d67f9ca7a0da3ac793aaec8a9cdd"
+# AdminCap = "0x3e392c06d70bc98e0e815ba50a5a9f1b33b8417161c3f22bf4c4c7b5b81c75d4"
