@@ -53,6 +53,7 @@ const ERolesNotSameLength: u64 = 8;
 const EThresholdTooHigh: u64 = 9;
 const EThresholdNull: u64 = 10;
 const ERoleNotAdded: u64 = 11;
+const EDuplicateAddress: u64 = 12;
 
 // === Structs ===
 
@@ -377,7 +378,7 @@ public(package) fun config_mut(account: &mut Account<Multisig>): &mut Multisig {
 }
 
 // === Private functions ===
-
+//TODO: verify duplicates
 fun verify_new_rules(
     // members 
     addresses: vector<address>,
@@ -393,6 +394,11 @@ fun verify_new_rules(
     assert!(role_names.length() == role_thresholds.length(), ERolesNotSameLength);
     assert!(total_weight >= global, EThresholdTooHigh);
     assert!(global != 0, EThresholdNull);
+    let mut checked = vec_set::empty<address>();
+    addresses.do!(|addr| {
+        assert!(!checked.contains(&addr), EDuplicateAddress);
+        checked.insert(addr);
+    });
 
     let mut weights_for_role: VecMap<String, u64> = vec_map::empty();
     weights.zip_do!(roles, |weight, roles_for_addr| {

@@ -562,3 +562,19 @@ fun test_error_verify_rules_role_threshold_too_high() {
 
     end(scenario, extensions, account, fees, clock);
 }
+
+#[test, expected_failure(abort_code = multisig::EDuplicateAddress)]
+fun test_error_verify_rules_duplicate_address() {
+    let (scenario, extensions, account, fees, clock) = start();
+
+    multisig::new_config(
+        vector[OWNER, OWNER], 
+        vector[1, 1], 
+        vector[vector[full_role()], vector[]], 
+        1, 
+        vector[], 
+        vector[], 
+    );
+
+    end(scenario, extensions, account, fees, clock);
+}
