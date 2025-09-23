@@ -10,11 +10,6 @@ local = "../../../move-framework/packages/protocol"
 [dependencies.AccountExtensions]
 local = "../../../move-framework/packages/extensions"
 
-[dependencies.Sui]
-git = "https://github.com/MystenLabs/sui.git"
-subdir = "crates/sui-framework/packages/sui-framework"
-rev = "testnet"
-
 [addresses]
 account_multisig = "0x460632ef4e9e708658788229531b99f1f3285de06e1e50e98a22633c7e494867"
 account_protocol = "0x10c87c29ea5d5674458652ababa246742a763f9deafed11608b7f0baea296484"
