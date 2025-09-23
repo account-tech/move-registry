@@ -21,7 +21,7 @@ module account_dao::math {
      * @param x The operand.
      * @return u256. Log2(x).
      */
-    public fun log2_down(mut x: u64): u8 {
+    public fun log2_down(mut x: u256): u8 {
         let mut result = 0;
         if (x >> 128 > 0) {
             x = x >> 128;
@@ -85,7 +85,7 @@ module account_dao::math {
     public fun sqrt_down(x: u64): u64 {
         if (x == 0) return 0;
 
-        let mut result = 1 << ((log2_down(x) >> 1) as u8);
+        let mut result = 1 << ((log2_down(x as u256) >> 1) as u8);
 
         result = (result + x / result) >> 1;
         result = (result + x / result) >> 1;
