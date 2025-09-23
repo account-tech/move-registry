@@ -212,7 +212,7 @@ public fun new_account<AssetType>(
 
     let config = Dao {
         groups: vector[],
-        asset_type: type_name::get<AssetType>(),
+        asset_type: type_name::with_defining_ids<AssetType>(),
         auth_voting_power,
         unstaking_cooldown,
         voting_rule,
@@ -470,7 +470,7 @@ public fun new_vote<Asset: store>(
     ctx: &mut TxContext
 ): Vote<Asset> {
     assert!(account.intents().contains(intent_key), EInvalidIntentKey);
-    assert!(account.config().asset_type == type_name::get<Asset>(), EInvalidAssetType);
+    assert!(account.config().asset_type == type_name::with_defining_ids<Asset>(), EInvalidAssetType);
 
     Vote {
         id: object::new(ctx),
@@ -616,8 +616,8 @@ public fun minimum_votes(dao: &Dao): u64 {
 }
 
 public fun is_coin(dao: &Dao): bool {
-    let addr = dao.asset_type.get_address();
-    let module_name = dao.asset_type.get_module();
+    let addr = dao.asset_type.address_string();
+    let module_name = dao.asset_type.module_string();
 
     let str_bytes = dao.asset_type.into_string().as_bytes();
     let mut struct_name = vector[];
@@ -702,7 +702,7 @@ public(package) fun new_config<AssetType>(
     voting_quorum: u64,
 ): Dao {
     Dao { 
-        asset_type: type_name::get<AssetType>(),
+        asset_type: type_name::with_defining_ids<AssetType>(),
         auth_voting_power,
         groups: vector[],
         unstaking_cooldown, 
@@ -788,5 +788,5 @@ public fun init_for_testing(ctx: &mut TxContext) {
 
 #[test_only]
 public fun set_asset_type_for_testing<Asset>(account: &mut Account<Dao>) {
-    account.config_mut(version::current(), ConfigWitness()).asset_type = type_name::get<Asset>();
+    account.config_mut(version::current(), ConfigWitness()).asset_type = type_name::with_defining_ids<Asset>();
 }

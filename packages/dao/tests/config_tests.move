@@ -112,6 +112,7 @@ fun test_config_dao() {
     let mut vote = dao::new_vote(&mut account, b"config".to_string(), staked, &clock, scenario.ctx());
     vote.vote(&mut account, YES, &clock);
     
+    clock.increment_for_testing(2);
     let mut executable = dao::execute_votes_intent(&mut account, b"config".to_string(), &clock);
     config::execute_config_dao(&mut executable, &mut account);
     account.confirm_execution(executable);
@@ -121,7 +122,7 @@ fun test_config_dao() {
     expired.destroy_empty();
     
     let dao = account.config();
-    assert!(dao.asset_type() == type_name::get<Obj>());
+    assert!(dao.asset_type() == type_name::with_defining_ids<Obj>());
     assert!(dao.auth_voting_power() == 2);
     assert!(dao.unstaking_cooldown() == 1);
     assert!(dao.voting_rule() == QUADRATIC);
@@ -156,7 +157,7 @@ fun test_config_dao_deletion() {
         params,
         outcome,
         // dao rules
-        2,
+        4,
         1,
         QUADRATIC,
         11,

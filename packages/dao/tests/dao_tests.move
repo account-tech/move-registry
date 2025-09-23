@@ -142,13 +142,13 @@ fun test_dao_getters() {
     let (scenario, extensions, registry, account, clock) = start();
     let dao = account.config();
     
-    assert!(dao.asset_type() == type_name::get<Coin<SUI>>());
+    assert!(dao.asset_type() == type_name::with_defining_ids<Coin<SUI>>());
     assert!(dao.auth_voting_power() == 1);
     assert!(dao.unstaking_cooldown() == 0);
     assert!(dao.voting_rule() == LINEAR);
     assert!(dao.max_voting_power() == 10);
-    assert!(dao.voting_quorum() == 3);
-    assert!(dao.minimum_votes() == 5);
+    assert!(dao.minimum_votes() == 3);
+    assert!(dao.voting_quorum() == 5);
 
     end(scenario, extensions, registry, account, clock);
 }
@@ -194,9 +194,9 @@ fun test_stake_unstake_coin() {
     staked.stake_coin(coin::mint_for_testing<SUI>(10, scenario.ctx()));
     assert!(staked.value() == 20);
 
-    staked.unstake(&clock);
+    staked.unstake(&account, &clock);
     assert!(staked.unstaked() == option::some(0));
-    staked.claim_and_keep(&mut account, &clock, scenario.ctx());
+    staked.claim_and_keep(&clock, scenario.ctx());
 
     scenario.next_tx(BOB);
     let coin = scenario.take_from_sender<Coin<SUI>>();
@@ -220,9 +220,9 @@ fun test_stake_unstake_object() {
     staked.stake_object(Obj { id: object::new(scenario.ctx()) });
     assert!(staked.value() == 2);
 
-    staked.unstake(&clock);
+    staked.unstake(&account, &clock);
     assert!(staked.unstaked() == option::some(0));
-    staked.claim_and_keep(&mut account, &clock, scenario.ctx());
+    staked.claim_and_keep(&clock, scenario.ctx());
 
     scenario.next_tx(BOB);
     let obj = scenario.take_from_sender<Obj>();
@@ -260,7 +260,9 @@ fun test_merge_split_staked_object() {
     let (mut scenario, extensions, registry, mut account, clock) = start();
     
     let mut staked1 = dao::new_staked_object<Obj>(&mut account, scenario.ctx());
-    staked1.stake_object(Obj { id: object::new(scenario.ctx()) });
+    let uid = object::new(scenario.ctx());
+    let id = uid.to_inner();
+    staked1.stake_object(Obj { id: uid });
     assert!(staked1.value() == 1);
 
     let mut staked2 = dao::new_staked_object<Obj>(&mut account, scenario.ctx());
@@ -271,7 +273,7 @@ fun test_merge_split_staked_object() {
     staked1.merge_staked_object(staked2);
     assert!(staked1.value() == 3);
 
-    let staked3 = staked1.split_staked_object(1, scenario.ctx());
+    let staked3 = staked1.split_staked_object(vector[id], scenario.ctx());
     assert!(staked3.value() == 1);
     assert!(staked1.value() == 2);
 
@@ -432,13 +434,12 @@ fun test_intent_execution() {
     bob_vote.vote(&mut account, YES, &clock);
 
     // execute intent
+    clock.increment_for_testing(2);
     let mut executable = dao::execute_votes_intent(&mut account, b"dummy".to_string(), &clock);
     executable.next_action<_, bool, _>(DummyIntent());
     account.confirm_execution(executable); 
 
     let expired = account.destroy_empty_intent<_, Votes>(b"dummy".to_string());
-
-    clock.increment_for_testing(1);
     let staked = bob_vote.destroy_vote(&clock);
 
     destroy(expired);
