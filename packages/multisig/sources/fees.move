@@ -79,6 +79,14 @@ public fun set_amount(
     fees.amount = amount;
 }
 
+public fun set_recipient(
+    _: &AdminCap, 
+    fees: &mut Fees, 
+    recipient: address
+) {
+    fees.recipient = recipient;
+}
+
 // === Test Functions ===
 
 #[test_only]
