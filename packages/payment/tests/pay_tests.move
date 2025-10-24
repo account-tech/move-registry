@@ -44,8 +44,8 @@ fun start(): (Scenario, Extensions, Account<Payment>, Fees, Clock) {
     let cap = scenario.take_from_sender<AdminCap>();
     let fees = scenario.take_shared<Fees>();
     // add core deps
-    extensions.add(&cap, b"AccountProtocol".to_string(), @account_protocol, 1);
-    extensions.add(&cap, b"AccountPayment".to_string(), @account_payment, 1);
+    extensions.add(&cap, b"account_protocol".to_string(), @account_protocol, 1);
+    extensions.add(&cap, b"account_payment".to_string(), @account_payment, 1);
     // Account generic types are dummy types (bool, bool)
     let mut account = payment::new_account(&extensions, scenario.ctx());
     account.config_mut(version::current(), payment::config_witness()).members_mut_for_testing().get_mut(&OWNER).insert(full_role());

@@ -64,9 +64,9 @@ fun start(): (Scenario, Extensions, Registry, Account<Dao>, Clock) {
     let mut extensions = scenario.take_shared<Extensions>();
     let cap = scenario.take_from_sender<AdminCap>();
     // add core deps
-    extensions.add(&cap, b"AccountProtocol".to_string(), @account_protocol, 1);
-    extensions.add(&cap, b"AccountDao".to_string(), @account_dao, 1);
-    extensions.add(&cap, b"AccountActions".to_string(), @0xAC, 1);
+    extensions.add(&cap, b"account_protocol".to_string(), @account_protocol, 1);
+    extensions.add(&cap, b"account_dao".to_string(), @account_dao, 1);
+    extensions.add(&cap, b"account_actions".to_string(), @0xAC, 1);
 
     let account = dao::new_account<Coin<SUI>>(&mut registry, &extensions, 1,0,LINEAR,10,3,5,scenario.ctx());
     let clock = clock::create_for_testing(scenario.ctx());
@@ -159,9 +159,9 @@ fun test_deps() {
     let deps = account.deps();
 
     assert!(deps.length() == 3);
-    assert!(deps.get_by_idx(0).name() == b"AccountProtocol".to_string());
-    assert!(deps.get_by_idx(1).name() == b"AccountDao".to_string());
-    assert!(deps.get_by_idx(2).name() == b"AccountActions".to_string());
+    assert!(deps.get_by_idx(0).name() == b"account_protocol".to_string());
+    assert!(deps.get_by_idx(1).name() == b"account_dao".to_string());
+    assert!(deps.get_by_idx(2).name() == b"account_actions".to_string());
 
     end(scenario, extensions, registry, account, clock);
 }

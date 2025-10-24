@@ -1,13 +1,13 @@
 [package]
-name = "AccountPayment"
+name = "account_payment"
 edition = "2024.beta"
 license = "Apache-2.0"
 authors = [ "Thouny (thouny@tuta.io)" ]
 
-[dependencies.AccountProtocol]
+[dependencies.account_protocol]
 local = "../../../move-framework/packages/protocol"
 
-[dependencies.AccountExtensions]
+[dependencies.account_extensions]
 local = "../../../move-framework/packages/extensions"
 
 [dependencies.Sui]

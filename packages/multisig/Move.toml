@@ -4,13 +4,13 @@ edition = "2024.beta"
 license = "Apache-2.0"
 authors = [ "Thouny (thouny@tuta.io)" ]
 
-[dependencies.AccountProtocol]
+[dependencies.account_protocol]
 local = "../../../move-framework/packages/protocol"
 
-[dependencies.AccountExtensions]
+[dependencies.account_extensions]
 local = "../../../move-framework/packages/extensions"
 
 [addresses]
-account_multisig = "0x262efd80b137d0b8da1533819a53781edf21300fe5cb6089183bcab93b887e0f"
-account_protocol = "0xdbf6eb7acfe83ce0f26fd884ea77b1358395e85dac4c47effd4c50be4d810afc"
-account_extensions = "0x1ac1e0ddfc88c189c78a6001a77c80f36a820335448bc110f2885f809e91cb62"
+account_multisig = "0x2a2fad949635bf1451654174f0666a2e990f2172857ab70fa13cb5f606ce2088"
+account_protocol = "0xcababb3174ca41c616a691024e98e37379e15af969e56b5992fa8139c354c6f5"
+account_extensions = "0x162a649c6b0edc3bd1385124afdeffd6f85ab578484dad15c82326438219a347"

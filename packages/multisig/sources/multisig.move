@@ -101,7 +101,7 @@ public struct Approvals has copy, drop, store {
 
 /// Init and returns a new Account object.
 /// Creator is added by default with weight and global threshold of 1.
-/// AccountProtocol, AccountMultisig and AccountActions are added as dependencies.
+/// account_protocol, account_multisig and account_actions are added as dependencies.
 public fun new_account(
     extensions: &Extensions,
     fees: &Fees,
@@ -127,7 +127,7 @@ public fun new_account(
         ctx,
         || deps::new_latest_extensions(
             extensions,
-            vector[b"AccountProtocol".to_string(), b"AccountMultisig".to_string(), b"AccountActions".to_string()]
+            vector[b"account_protocol".to_string(), b"account_multisig".to_string(), b"account_actions".to_string()]
         )
     )
 }

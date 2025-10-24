@@ -133,7 +133,7 @@ fun init(ctx: &mut TxContext) {
 
 /// Init and returns a new Account object.
 /// Creator is added by default.
-/// AccountProtocol and P2PRamp are added as dependencies.
+/// account_protocol and P2PRamp are added as dependencies.
 public fun new_account(
     registry: &mut AccountRegistry,
     extensions: &Extensions,
@@ -150,7 +150,7 @@ public fun new_account(
         ctx,
         || deps::new_latest_extensions(
             extensions,
-            vector[b"AccountProtocol".to_string(), b"P2PRamp".to_string()]
+            vector[b"account_protocol".to_string(), b"P2PRamp".to_string()]
         )
     );
 

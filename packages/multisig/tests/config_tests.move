@@ -41,9 +41,9 @@ fun start(): (Scenario, Extensions, Account<Multisig>, Fees, Clock) {
     let cap = scenario.take_from_sender<AdminCap>();
     let fees = scenario.take_shared<Fees>();
     // add core deps
-    extensions.add(&cap, b"AccountProtocol".to_string(), @account_protocol, 1);
-    extensions.add(&cap, b"AccountMultisig".to_string(), @account_multisig, 1);
-    extensions.add(&cap, b"AccountActions".to_string(), @0x0, 1);
+    extensions.add(&cap, b"account_protocol".to_string(), @account_protocol, 1);
+    extensions.add(&cap, b"account_multisig".to_string(), @account_multisig, 1);
+    extensions.add(&cap, b"account_actions".to_string(), @0x0, 1);
 
     let mut account = multisig::new_account(&extensions, &fees, coin::mint_for_testing<SUI>(10 * DECIMALS, scenario.ctx()), scenario.ctx());
     account.config_mut(version::current(), multisig::config_witness()).add_role_to_multisig(full_role(), 1);

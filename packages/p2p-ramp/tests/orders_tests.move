@@ -45,7 +45,7 @@ fun start() : (Scenario, Extensions, AccountRegistry, OrderRegistry, Policy, Clo
     let mut extensions = scenario.take_shared<Extensions>();
 
     //add core deps
-    extensions.add(&cap, b"AccountProtocol".to_string(), @account_protocol, 1);
+    extensions.add(&cap, b"account_protocol".to_string(), @account_protocol, 1);
     extensions.add(&cap, b"P2PRamp".to_string(), @p2p_ramp, 1);
 
     // set allowed coin types and allowed fiat

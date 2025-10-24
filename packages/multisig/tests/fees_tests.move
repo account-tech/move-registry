@@ -71,9 +71,21 @@ fun test_set_amount() {
     let (mut scenario, mut fees, cap) = start();
     
     scenario.next_tx(OWNER);
-    cap.set_amount(&mut fees, 20 * DECIMALS);
+    fees.set_amount(&cap, 20 * DECIMALS);
 
     assert!(fees.amount() == 20 * DECIMALS);
+
+    end(scenario, fees, cap);
+}
+
+#[test]
+fun test_set_recipient() {
+    let (mut scenario, mut fees, cap) = start();
+    
+    scenario.next_tx(OWNER);
+    fees.set_recipient(&cap, @0xB0B);
+
+    assert!(fees.recipient() == @0xB0B);
 
     end(scenario, fees, cap);
 }

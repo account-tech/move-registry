@@ -72,16 +72,16 @@ public(package) fun process(
 // === Admin Functions ===
 
 public fun set_amount(
-    _: &AdminCap, 
     fees: &mut Fees, 
+    _: &AdminCap, 
     amount: u64
 ) {
     fees.amount = amount;
 }
 
 public fun set_recipient(
-    _: &AdminCap, 
     fees: &mut Fees, 
+    _: &AdminCap, 
     recipient: address
 ) {
     fees.recipient = recipient;

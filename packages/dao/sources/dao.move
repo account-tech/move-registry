@@ -228,7 +228,7 @@ public fun new_account<AssetType>(
         ctx,
         || deps::new_latest_extensions(
             extensions,
-            vector[b"AccountProtocol".to_string(), b"AccountDao".to_string(), b"AccountActions".to_string()]
+            vector[b"account_protocol".to_string(), b"account_dao".to_string(), b"account_actions".to_string()]
         )
     );
 

@@ -38,7 +38,7 @@ fun start(): (Scenario, Extensions, Account<P2PRamp>, AccountRegistry, Policy, C
     let mut acc_registry = scenario.take_shared<AccountRegistry>();
     let policy = scenario.take_shared<Policy>();
     //add core deps
-    extensions.add(&cap, b"AccountProtocol".to_string(), @account_protocol, 1);
+    extensions.add(&cap, b"account_protocol".to_string(), @account_protocol, 1);
     extensions.add(&cap, b"P2PRamp".to_string(), @p2p_ramp, 1);
 
     let account = p2p_ramp::new_account(&mut acc_registry, &extensions, scenario.ctx());

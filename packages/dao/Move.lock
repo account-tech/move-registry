@@ -2,38 +2,15 @@
 
 [move]
 version = 3
-manifest_digest = "21BA68115677146725205E9EE570E49C96C83E3B082A98D26F2BCDFF9AFD330A"
+manifest_digest = "22967D7145AE8E7A366C82A7A636DD2333BD890C18E22B1E23558AEAB9826ABE"
 deps_digest = "52B406A7A21811BEF51751CF88DA0E76DAEFFEAC888D4F4060B1A72BBE7D8D35"
 dependencies = [
-  { id = "AccountExtensions", name = "AccountExtensions" },
-  { id = "AccountProtocol", name = "AccountProtocol" },
   { id = "Bridge", name = "Bridge" },
   { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Sui", name = "Sui" },
   { id = "SuiSystem", name = "SuiSystem" },
-]
-
-[[move.package]]
-id = "AccountExtensions"
-source = { local = "../../../move-framework/packages/extensions" }
-
-dependencies = [
-  { id = "Bridge", name = "Bridge" },
-  { id = "MoveStdlib", name = "MoveStdlib" },
-  { id = "Sui", name = "Sui" },
-  { id = "SuiSystem", name = "SuiSystem" },
-]
-
-[[move.package]]
-id = "AccountProtocol"
-source = { local = "../../../move-framework/packages/protocol" }
-
-dependencies = [
-  { id = "AccountExtensions", name = "AccountExtensions" },
-  { id = "Bridge", name = "Bridge" },
-  { id = "MoveStdlib", name = "MoveStdlib" },
-  { id = "Sui", name = "Sui" },
-  { id = "SuiSystem", name = "SuiSystem" },
+  { id = "account_extensions", name = "account_extensions" },
+  { id = "account_protocol", name = "account_protocol" },
 ]
 
 [[move.package]]
@@ -67,10 +44,33 @@ dependencies = [
   { id = "Sui", name = "Sui" },
 ]
 
+[[move.package]]
+id = "account_extensions"
+source = { local = "../../../move-framework/packages/extensions" }
+
+dependencies = [
+  { id = "Bridge", name = "Bridge" },
+  { id = "MoveStdlib", name = "MoveStdlib" },
+  { id = "Sui", name = "Sui" },
+  { id = "SuiSystem", name = "SuiSystem" },
+]
+
+[[move.package]]
+id = "account_protocol"
+source = { local = "../../../move-framework/packages/protocol" }
+
+dependencies = [
+  { id = "Bridge", name = "Bridge" },
+  { id = "MoveStdlib", name = "MoveStdlib" },
+  { id = "Sui", name = "Sui" },
+  { id = "SuiSystem", name = "SuiSystem" },
+  { id = "account_extensions", name = "account_extensions" },
+]
+
 [env]
 
 [env.testnet]
 chain-id = "4c78adac"
-original-published-id = "0x3c47449fc69ab70485497b3a21720561b4775f514ee99576024e97422c54c4a8"
-latest-published-id = "0x3c47449fc69ab70485497b3a21720561b4775f514ee99576024e97422c54c4a8"
+original-published-id = "0xd5b916c4eeb291444233f1fc19c1b7bf779d2fbc9661c550010e0250a9702080"
+latest-published-id = "0xd5b916c4eeb291444233f1fc19c1b7bf779d2fbc9661c550010e0250a9702080"
 published-version = "1"

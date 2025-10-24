@@ -5,13 +5,13 @@ version = 3
 manifest_digest = "6C3BBDCD9247F6E051552A3E2563B8C90C8F44466C12D0005457F191E31FF544"
 deps_digest = "060AD7E57DFB13104F21BE5F5C3759D03F0553FC3229247D9A7A6B45F50D03A3"
 dependencies = [
-  { id = "AccountExtensions", name = "AccountExtensions" },
-  { id = "AccountProtocol", name = "AccountProtocol" },
+  { id = "account_extensions", name = "account_extensions" },
+  { id = "account_protocol", name = "account_protocol" },
   { id = "Sui", name = "Sui" },
 ]
 
 [[move.package]]
-id = "AccountExtensions"
+id = "account_extensions"
 source = { local = "../../../move-framework/packages/extensions" }
 
 dependencies = [
@@ -19,11 +19,11 @@ dependencies = [
 ]
 
 [[move.package]]
-id = "AccountProtocol"
+id = "account_protocol"
 source = { local = "../../../move-framework/packages/protocol" }
 
 dependencies = [
-  { id = "AccountExtensions", name = "AccountExtensions" },
+  { id = "account_extensions", name = "account_extensions" },
   { id = "Sui", name = "Sui" },
 ]
 

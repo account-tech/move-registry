@@ -5,8 +5,8 @@ version = 3
 manifest_digest = "3816D8A7F9631776E60374948F88BA48194BB43EF79DCDF59C13C74CB1666D96"
 deps_digest = "52B406A7A21811BEF51751CF88DA0E76DAEFFEAC888D4F4060B1A72BBE7D8D35"
 dependencies = [
-  { id = "AccountExtensions", name = "AccountExtensions" },
-  { id = "AccountProtocol", name = "AccountProtocol" },
+  { id = "account_extensions", name = "account_extensions" },
+  { id = "account_protocol", name = "account_protocol" },
   { id = "Bridge", name = "Bridge" },
   { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Sui", name = "Sui" },
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [[move.package]]
-id = "AccountExtensions"
+id = "account_extensions"
 source = { git = "https://github.com/account-tech/move-framework.git", rev = "main", subdir = "packages/extensions" }
 
 dependencies = [
@@ -22,11 +22,11 @@ dependencies = [
 ]
 
 [[move.package]]
-id = "AccountProtocol"
+id = "account_protocol"
 source = { git = "https://github.com/account-tech/move-framework.git", rev = "main", subdir = "packages/protocol" }
 
 dependencies = [
-  { id = "AccountExtensions", name = "AccountExtensions" },
+  { id = "account_extensions", name = "account_extensions" },
   { id = "Sui", name = "Sui" },
 ]
 
