@@ -1,8 +1,8 @@
 #[test_only]
 module account_multisig::fees_tests;
 
+use std::unit_test::destroy;
 use sui::{
-    test_utils::destroy,
     test_scenario::{Self as ts, Scenario},
     coin::{Self, Coin},
     sui::SUI,

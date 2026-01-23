@@ -4,11 +4,10 @@ module account_dao::dao_tests;
 // === Imports ===
 
 use std::{
-    string::String,
-    type_name::{Self, TypeName},
+    type_name,
+    unit_test::destroy,
 };
 use sui::{
-    test_utils::destroy,
     test_scenario::{Self as ts, Scenario},
     clock::{Self, Clock},
     coin::{Self, Coin},
@@ -30,14 +29,13 @@ use account_dao::{
 
 const ALICE: address = @0xA11CE;
 const BOB: address = @0xB0B;
-const DECIMALS: u64 = 1_000_000_000; // 10^9
 
 // acts as a dynamic enum for the voting rule
-const VOTING_RULE: u8 = LINEAR | QUADRATIC;
+// const VOTING_RULE: u8 = LINEAR | QUADRATIC;
 const LINEAR: u8 = 0;
-const QUADRATIC: u8 = 1;
+// const QUADRATIC: u8 = 1;
 // answers for the vote
-const ANSWER: u8 = NO | YES | ABSTAIN;
+// const ANSWER: u8 = NO | YES | ABSTAIN;
 const NO: u8 = 0;
 const YES: u8 = 1;
 const ABSTAIN: u8 = 2;
@@ -97,32 +95,6 @@ fun create_and_add_dummy_intent(
         scenario.ctx(),
     );
     let outcome = dao::empty_votes_outcome(1, 2, clock);
-    intent_interface::build_intent!<Dao, _, _>(
-        account,
-        params,
-        outcome, 
-        b"Degen".to_string(),
-        version::current(),
-        DummyIntent(), 
-        scenario.ctx(),
-        |intent, iw| intent.add_action(true, iw)
-    );
-}
-
-fun create_and_add_other_intent(
-    scenario: &mut Scenario,
-    account: &mut Account<Dao>,
-    clock: &Clock,
-) {
-    let outcome = dao::empty_votes_outcome(1, 2, clock);
-    let params = intents::new_params(
-        b"other".to_string(), 
-        b"description".to_string(), 
-        vector[0],
-        1, 
-        clock,
-        scenario.ctx(),
-    );
     intent_interface::build_intent!<Dao, _, _>(
         account,
         params,

@@ -22,11 +22,12 @@ use sui::{
 };
 use account_extensions::extensions::Extensions;
 use account_protocol::{
-    account::{Account, Auth},
+    account::{Self, Account, Auth},
     executable::Executable,
     user::{Self, User},
     account_interface,
     deps,
+    metadata,
 };
 use account_multisig::{
     fees::Fees,
@@ -120,15 +121,20 @@ public fun new_account(
         roles: vector[],
     };
 
-    account_interface::create_account!(
+    let metadata = metadata::empty();
+
+    let deps = deps::new_latest_extensions(
+        extensions,
+        vector[b"account_protocol".to_string(), b"account_multisig".to_string(), b"account_actions".to_string()]
+    );
+
+    account::new(
         config,
+        metadata,
+        deps,
         version::current(),
         ConfigWitness(),
         ctx,
-        || deps::new_latest_extensions(
-            extensions,
-            vector[b"account_protocol".to_string(), b"account_multisig".to_string(), b"account_actions".to_string()]
-        )
     )
 }
 

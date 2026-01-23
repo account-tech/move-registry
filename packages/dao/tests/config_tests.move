@@ -3,9 +3,11 @@ module account_dao::config_tests;
 
 // === Imports ===
 
-use std::type_name;
+use std::{
+    type_name,
+    unit_test::destroy,
+};
 use sui::{
-    test_utils::destroy,
     test_scenario::{Self as ts, Scenario},
     clock::{Self, Clock},
     coin::{Self, Coin},
@@ -23,15 +25,15 @@ use account_dao::{
 
 // === Constants ===
 
-const ALICE: address = @0xA11CE;
+// const ALICE: address = @0xA11CE;
 const BOB: address = @0xB0B;
 
 const LINEAR: u8 = 0;
 const QUADRATIC: u8 = 1;
 
-const NO: u8 = 0;
+// const NO: u8 = 0;
 const YES: u8 = 1;
-const ABSTAIN: u8 = 2;
+// const ABSTAIN: u8 = 2;
 
 // === Structs ===
 
