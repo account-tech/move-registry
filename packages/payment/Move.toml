@@ -1,6 +1,6 @@
 [package]
 name = "account_payment"
-edition = "2024.beta"
+edition = "2024"
 license = "Apache-2.0"
 authors = [ "Thouny (thouny@tuta.io)" ]
 
@@ -9,13 +9,3 @@ local = "../../../move-framework/packages/protocol"
 
 [dependencies.account_extensions]
 local = "../../../move-framework/packages/extensions"
-
-[dependencies.Sui]
-git = "https://github.com/MystenLabs/sui.git"
-subdir = "crates/sui-framework/packages/sui-framework"
-rev = "testnet"
-
-[addresses]
-account_payment = "0xd1dfd2aa93cc33b6780e567a502a6f771ac737fe75dbef3d51ca139e423bd1ed"
-account_protocol = "0x043d63bbb07420bcef4b933e6b0dd59d1fb42fa2fa5d1a39e91e26a5e6e50049"
-account_extensions = "0x2f10ccb3323bae290b908c48e383a4136e309ea47ec42d33f5671e4fd61f3953"

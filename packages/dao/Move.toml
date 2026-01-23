@@ -1,6 +1,6 @@
 [package]
 name = "account_dao"
-edition = "2024.beta"
+edition = "2024"
 license = "Apache-2.0"
 authors = [ "Thouny (thouny@tuta.io)" ]
 
@@ -9,8 +9,3 @@ local = "../../../move-framework/packages/protocol"
 
 [dependencies.account_extensions]
 local = "../../../move-framework/packages/extensions"
-
-[addresses]
-account_dao = "0x1e2b7dce6f22f0ff8f78ecce1baf2ea7929f2eae9a11eba7b2e4b0c6134f7725"
-account_protocol = "0xb4cb9bfc37d340519e834165d6fc791ec279f756c2d3a3e2086ec22e09c04d3b"
-account_extensions = "0xce60a8a677814b1aae0aca19b49ccf35859dc5522aa407a74aaa55f28b0e641f"
