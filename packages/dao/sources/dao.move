@@ -226,7 +226,7 @@ public fun new_account<AssetType>(
 
     let deps = deps::new_latest_extensions(
         extensions,
-        vector[b"account_protocol".to_string(), b"account_dao".to_string(), b"account_actions".to_string()]
+        vector["account_protocol", "account_dao", "account_actions"]
     );
 
     let account = account::new(

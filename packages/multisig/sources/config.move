@@ -58,7 +58,7 @@ public fun request_config_multisig(
     account.build_intent!(
         params,
         outcome,
-        b"".to_string(),
+        "",
         version::current(),
         ConfigMultisigIntent(),
         ctx,

@@ -84,7 +84,7 @@ public fun request_config_dao<AssetType>(
     account.build_intent!(
         params,
         outcome,
-        b"".to_string(),
+        "",
         version::current(),
         ConfigDaoIntent(),
         ctx,
